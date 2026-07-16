@@ -35,6 +35,20 @@ export class UnauthorizedError extends AppError {
   }
 }
 
+/**
+ * 403, not 401: the user *is* authenticated, they just have no active
+ * organization. The frontend tells the two apart — 401 goes to /login, this one
+ * goes to /select-organization.
+ */
+export class OrganizationRequiredError extends AppError {
+  readonly statusCode = 403;
+  readonly code = "ORGANIZATION_REQUIRED";
+
+  constructor(message = "Nenhuma organização ativa na sessão") {
+    super(message);
+  }
+}
+
 export class ValidationError extends AppError {
   readonly statusCode = 400;
   readonly code = "VALIDATION_ERROR";

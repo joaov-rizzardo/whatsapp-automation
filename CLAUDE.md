@@ -53,13 +53,17 @@ Next 16 and Prisma 7 both contain breaking changes you will otherwise get wrong 
 
 ## Current state
 
-**Authentication exists end to end** — it is the first real feature and the reference for the ones that follow.
+**Authentication and organizations exist end to end** — they are the first real features and the reference for the ones that follow.
 
 Backend: Prisma 7 + PostgreSQL, Vitest, `config/env.ts`, the `plugins/` layer (prisma, auth, require-auth, error-handler), Better Auth serving `/api/auth/*`, and a protected `GET /api/me`. Email/password and Google sign-in, with the session in a cookie.
 
 Frontend: shadcn/ui (Radix base) with the ZapBot design system — tokens in `app/globals.css`, components in `components/ui/`, docs in `whatsapp-frontend/docs/design-system/`, visual check at `/design-system`. Working `/login` and `/register`, a protected `/dashboard`, and `proxy.ts`. React Hook Form and Zod are installed; **React Query is not** — see the frontend CLAUDE.md for why auth deliberately does not use it.
 
 Google sign-in only works once `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are filled in `whatsapp-backend/.env`; without them the provider is skipped and email/password still works.
+
+**Every user belongs to at least one organization.** Better Auth's `organization` plugin owns the `organization`/`member`/`invitation` tables; the active one lives in `session.activeOrganizationId` and is picked at session creation (exactly one → connected automatically; zero → `/onboarding`; several → `/select-organization`). Roles and invitations exist in the schema but are not wired up yet.
+
+The rule that protects every feature still to come: **`organizationId` comes from the session via `requireOrganization`, never from the payload**, and every per-organization query filters by it. Both CLAUDE.md files spell this out — read them before the first feature route.
 
 Both sides must be running for anything crossing the boundary, and PostgreSQL must be up (`docker compose up -d` at the root).
 

@@ -138,12 +138,22 @@ The project rule: **Server Component when the data can be fetched on the server;
 
 React Query is not installed at all today. It arrives with the first real data feature (conversations, messages) — and even then, auth stays on `useSession()`.
 
+**`features/organizations/` follows the same exception**, for the same reason: the Better Auth organization plugin ships `useListOrganizations()` and `useActiveOrganization()` with their own cache and reactivity. Wrapping them in React Query would mean two sources of truth for one session. Don't.
+
 Other things worth knowing before touching auth:
 
 - The API is a **different origin** (`:3333`), so `authClient` sets `credentials: "include"` — without it the browser never sends the session cookie.
 - On the server, the cookie must be **forwarded by hand** (`features/auth/api/getServerSession.ts`). That call is the real authorization.
-- `proxy.ts` only checks that a session cookie **exists**. A cookie can be expired or forged, so that check is UX (it avoids a flash of the protected page), never authorization.
+- `proxy.ts` only checks that a session cookie **exists**. A cookie can be expired or forged, so that check is UX (it avoids a flash of the protected page), never authorization. It decides nothing about organizations either — the active organization is not in the cookie.
 - Sign-in errors are mapped to pt-BR in `features/auth/lib/getAuthErrorMessage.ts`, and a failed sign-in must never reveal *whether* it was the email or the password — that would make the form an account enumeration oracle.
+
+### The organization gate lives in `app/(app)/layout.tsx`
+
+Every user belongs to at least one organization. That layout is the gate for the whole `(app)` group: no session → `/login`; no active organization → `/onboarding` (zero) or `/select-organization` (several). Pages inside `(app)` can assume both and don't repeat the check.
+
+`/onboarding` and `/select-organization` live in their own `(org-setup)` group precisely because they must **not** inherit that gate — inside `(app)` they would redirect to themselves forever. They require a session, not an organization.
+
+⚠️ **`router.refresh()` after `organization.create` and `organization.setActive` is not optional.** Without it the Router Cache replays the Server Component rendered for the previous organization, and the switch looks like it did nothing. `create` already activates the organization it creates — don't call `setActive` after it.
 
 React Query is for server state on the client — data that needs refetching, polling, a cache shared across components, or user interaction (for WhatsApp: a live message list, connection status). Don't use React Query for what a Server Component already solves, and never fetch with `useEffect` + `useState`.
 

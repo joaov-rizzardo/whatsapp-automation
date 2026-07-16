@@ -16,11 +16,13 @@ declare module "fastify" {
 
   interface FastifyRequest {
     user: SessionUser | null;
+    activeOrganizationId: string | null;
   }
 }
 
 async function requireAuthPlugin(app: FastifyInstance): Promise<void> {
   app.decorateRequest("user", null);
+  app.decorateRequest("activeOrganizationId", null);
 
   const requireAuth: preHandlerAsyncHookHandler = async (request) => {
     const session = await app.auth.api.getSession({
@@ -32,6 +34,9 @@ async function requireAuthPlugin(app: FastifyInstance): Promise<void> {
     }
 
     request.user = session.user;
+    // Taken from the session we already fetched: a second getSession here would
+    // cost a second trip to the database on every authenticated request.
+    request.activeOrganizationId = session.session.activeOrganizationId ?? null;
   };
 
   app.decorate("requireAuth", requireAuth);

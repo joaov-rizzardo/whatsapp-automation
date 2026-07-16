@@ -19,5 +19,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  // Organization is not decided here: activeOrganizationId lives in the session
+  // row, not in the cookie, and this only looks at whether a cookie exists.
+  // app/(app)/layout.tsx is what resolves it.
+  matcher: ["/dashboard/:path*", "/onboarding", "/select-organization"],
 };
