@@ -1,13 +1,11 @@
 import { buildApp } from "./app.js";
-
-const port = Number(process.env.PORT ?? 3333);
-const host = process.env.HOST ?? "0.0.0.0";
+import { env } from "./config/env.js";
 
 const app = buildApp();
 
 async function start() {
   try {
-    await app.listen({ port, host });
+    await app.listen({ port: env.PORT, host: env.HOST });
   } catch (err) {
     app.log.error(err);
     process.exit(1);

@@ -17,6 +17,18 @@ There is no root `package.json`, no workspaces, no shared tooling. Each project 
 
 The two sides share no code. If both need the same type (an API payload shape, for instance), each declares it on its own side — the backend derives it from its route schema, the frontend from its Zod schema. Don't reach across the folder boundary with a relative import; the only contract between them is HTTP.
 
+## Commits
+
+**Conventional Commits, and the message is always written in English** — even though the product UI and this team speak pt-BR. One repo, one commit language.
+
+```
+feat: add email/password and Google authentication
+fix: forward set-cookie headers separately in the auth handler
+docs: record the Prisma 7 driver adapter requirement
+```
+
+Prefix with the type (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`), then a short imperative subject in lowercase. Since the two projects live in one repo, scope the change when it is one-sided and not obvious: `feat(backend):`, `fix(frontend):`.
+
 ## How the two connect
 
 The frontend talks to the backend over HTTP and nothing else. Backend listens on `PORT` (default **3333**), frontend dev server on **3000**. Both must be running to work on any feature that crosses the boundary.
@@ -41,8 +53,14 @@ Next 16 and Prisma 7 both contain breaking changes you will otherwise get wrong 
 
 ## Current state
 
-Early scaffolding. The backend is a `buildApp()` with a `/health` route and no Prisma, no test runner, no modules.
+**Authentication exists end to end** — it is the first real feature and the reference for the ones that follow.
 
-The frontend has shadcn/ui installed (Radix base) with the ZapBot design system ported onto it — tokens in `app/globals.css`, components in `components/ui/`, docs in `whatsapp-frontend/docs/design-system/`, and a visual check at `/design-system`. React Query, React Hook Form and Zod are still not installed. No feature modules exist on either side yet.
+Backend: Prisma 7 + PostgreSQL, Vitest, `config/env.ts`, the `plugins/` layer (prisma, auth, require-auth, error-handler), Better Auth serving `/api/auth/*`, and a protected `GET /api/me`. Email/password and Google sign-in, with the session in a cookie.
 
-The architecture in both CLAUDE.md files is the **target**, not a description of what exists. Build toward it as features arrive; don't assume a file described there is already on disk.
+Frontend: shadcn/ui (Radix base) with the ZapBot design system — tokens in `app/globals.css`, components in `components/ui/`, docs in `whatsapp-frontend/docs/design-system/`, visual check at `/design-system`. Working `/login` and `/register`, a protected `/dashboard`, and `proxy.ts`. React Hook Form and Zod are installed; **React Query is not** — see the frontend CLAUDE.md for why auth deliberately does not use it.
+
+Google sign-in only works once `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are filled in `whatsapp-backend/.env`; without them the provider is skipped and email/password still works.
+
+Both sides must be running for anything crossing the boundary, and PostgreSQL must be up (`docker compose up -d` at the root).
+
+Beyond auth, the architecture in both CLAUDE.md files is still the **target**, not a description of what exists. Don't assume a file described there is already on disk.

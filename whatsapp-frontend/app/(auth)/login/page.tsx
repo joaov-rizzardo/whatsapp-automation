@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { AuthCard } from "@/features/auth/components/AuthCard";
 import { AuthDivider } from "@/features/auth/components/AuthDivider";
-import { GoogleAuthButton } from "@/features/auth/components/GoogleAuthButton";
+import { GoogleAuthAction } from "@/features/auth/components/GoogleAuthAction";
 import { LoginForm } from "@/features/auth/components/LoginForm";
 
 export default function LoginPage() {
@@ -21,7 +21,7 @@ export default function LoginPage() {
     >
       <LoginForm />
       <AuthDivider />
-      <GoogleAuthButton label="Entrar com Google" />
+      <GoogleAuthAction label="Entrar com Google" />
     </AuthCard>
   );
 }

@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # whatsapp-frontend
 
-Stack: Next.js 16.2 (App Router) · React 19.2 · TypeScript strict · Tailwind v4 · shadcn/ui (base Radix) · React Query (client-side fetching) · React Hook Form + Zod (forms).
+Stack: Next.js 16.2 (App Router) · React 19.2 · TypeScript strict · Tailwind v4 · shadcn/ui (base Radix) · React Query (client-side fetching — **not installed yet**, see Data fetching) · React Hook Form + Zod (forms) · Better Auth (session).
 
 **We do not write unit tests in this project.** Validate changes by running the app (`npm run dev`), not by writing tests.
 
@@ -131,6 +131,19 @@ Server Components can access secrets and the backend directly without leaking in
 ## Data fetching
 
 The project rule: **Server Component when the data can be fetched on the server; React Query when the fetch happens on the client.**
+
+### Auth is the exception: it does not use React Query
+
+`features/auth/` uses **`authClient.useSession()`** from Better Auth (`lib/auth-client.ts`), not React Query. This is deliberate — please don't "fix" it. Better Auth ships its own session cache and reactivity; putting React Query on top would mean two sources of truth for the same session.
+
+React Query is not installed at all today. It arrives with the first real data feature (conversations, messages) — and even then, auth stays on `useSession()`.
+
+Other things worth knowing before touching auth:
+
+- The API is a **different origin** (`:3333`), so `authClient` sets `credentials: "include"` — without it the browser never sends the session cookie.
+- On the server, the cookie must be **forwarded by hand** (`features/auth/api/getServerSession.ts`). That call is the real authorization.
+- `proxy.ts` only checks that a session cookie **exists**. A cookie can be expired or forged, so that check is UX (it avoids a flash of the protected page), never authorization.
+- Sign-in errors are mapped to pt-BR in `features/auth/lib/getAuthErrorMessage.ts`, and a failed sign-in must never reveal *whether* it was the email or the password — that would make the form an account enumeration oracle.
 
 React Query is for server state on the client — data that needs refetching, polling, a cache shared across components, or user interaction (for WhatsApp: a live message list, connection status). Don't use React Query for what a Server Component already solves, and never fetch with `useEffect` + `useState`.
 
