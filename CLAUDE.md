@@ -41,6 +41,8 @@ Next 16 and Prisma 7 both contain breaking changes you will otherwise get wrong 
 
 ## Current state
 
-Early scaffolding. The backend is a `buildApp()` with a `/health` route and no Prisma, no test runner, no modules. The frontend is a fresh Next install without React Query, React Hook Form, or Zod. Nothing has been committed yet — the repository has zero commits.
+Early scaffolding. The backend is a `buildApp()` with a `/health` route and no Prisma, no test runner, no modules.
+
+The frontend has shadcn/ui installed (Radix base) with the ZapBot design system ported onto it — tokens in `app/globals.css`, components in `components/ui/`, docs in `whatsapp-frontend/docs/design-system/`, and a visual check at `/design-system`. React Query, React Hook Form and Zod are still not installed. No feature modules exist on either side yet.
 
 The architecture in both CLAUDE.md files is the **target**, not a description of what exists. Build toward it as features arrive; don't assume a file described there is already on disk.

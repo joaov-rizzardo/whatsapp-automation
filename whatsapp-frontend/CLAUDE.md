@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # whatsapp-frontend
 
-Stack: Next.js 16.2 (App Router) · React 19.2 · TypeScript strict · Tailwind v4 · React Query (client-side fetching) · React Hook Form + Zod (forms).
+Stack: Next.js 16.2 (App Router) · React 19.2 · TypeScript strict · Tailwind v4 · shadcn/ui (base Radix) · React Query (client-side fetching) · React Hook Form + Zod (forms).
 
 **We do not write unit tests in this project.** Validate changes by running the app (`npm run dev`), not by writing tests.
 
@@ -63,10 +63,11 @@ features/                     # one folder per domain
     schemas/                  # Zod schemas
     types/                    # types not derived from a schema
 components/                   # cross-feature, presentational UI
-  ui/                         # base elements: Button, Input, Dialog
+  ui/                         # shadcn/ui — owned by the CLI, see "UI components"
 hooks/                        # cross-feature hooks
 lib/                          # infrastructure: http client, utils, constants
 types/                        # global/shared types
+docs/design-system/           # the ZapBot design system (read before building UI)
 ```
 
 **Every file goes in the folder that matches its role.** A hook belongs in `hooks/`, a schema in `schemas/`, an HTTP call in `api/` — never inline in the component file that happens to use it. If a file's location doesn't tell you what's inside it, it's in the wrong folder.
@@ -180,9 +181,50 @@ export function SendMessageForm() {
 - A submit that calls the API from the client → React Query's `useMutation`, inside the hook.
 - If the form is a Server Action with `<form action={...}>`, the pairing is `useActionState` (not RHF) — the Server Function then receives `prevState` as its first argument.
 
+## UI components — shadcn/ui first
+
+**If shadcn/ui has the component, use shadcn/ui's.** Do not hand-roll a Button, Dialog, Select, Tooltip, Combobox, or anything else the registry already ships. Check first:
+
+```bash
+npx shadcn@latest add <name>     # e.g. dropdown-menu, sheet, table, form
+```
+
+This project is on the **Radix** base (`components.json` → `"style": "radix-nova"`), not Base UI. Keep it that way — mixing primitive libraries means two of everything.
+
+Why this is a rule and not a preference: a shadcn component is accessible by default (Radix underneath — focus traps, ARIA, keyboard nav), already speaks our tokens, and gets upstream fixes. A hand-written equivalent is accessibility work someone will have to redo, and forget.
+
+Write your own **only** when the registry has no equivalent. Today that's exactly one component: `Tag`. When you do write one, build it on the same tokens and put it in `components/ui/` next to the rest.
+
+**Components in `components/ui/` are already themed.** They were adapted in place to the ZapBot design system — restyled, never renamed. Variants keep shadcn's names (`default`, `secondary`, `ghost`, `destructive`), because shadcn blocks and components like `AlertDialog` consume `buttonVariants` by those names.
+
+Some caveats when running the CLI:
+
+- `add` on an existing component **overwrites your customizations**. Diff before accepting, and re-apply the ZapBot styling.
+- The CLI writes to `app/globals.css` too. It appends its own token block — reconcile it with the existing one rather than letting it duplicate.
+- **Check newly added components for `cursor-default` on clickable items.** `globals.css` restores `cursor: pointer` for buttons in `@layer base`, but utilities beat the base layer, and shadcn ships `cursor-default` on menu/select items (mimicking native macOS menus). `SelectItem` was already fixed; `dropdown-menu`, `context-menu`, `command` and `menubar` will need the same when installed.
+
+## Design system
+
+The UI follows the **ZapBot design system**, documented in [`docs/design-system/`](./docs/design-system/). Read it before building any screen — it covers content rules (pt-BR voice, CTA style, number formatting) as well as visuals, and those are not things you can infer from the code.
+
+The short version:
+
+- **One brand accent** — purple. At most one primary button, one accent, per screen.
+- **Never write a raw value.** No `#7c3aed`, no `16px`. If there's no token for what you need, the token is what's missing. Token reference: [`docs/design-system/tokens.md`](./docs/design-system/tokens.md).
+- **Rounded, always.** No square corners anywhere.
+- **Page background is never pure white** — cards are white *on top of* a subtly cool page. That contrast is the whole macOS read.
+- **`text-base` is 15px, not 16px.** The type scale is overridden to the ZapBot one; just use the utilities.
+- **Dark mode is not part of the design system.** The `.dark` block exists so shadcn components don't break, not as a designed palette. Don't build for it without specifying it first.
+
+**Verify visually at `/design-system`** (`app/design-system/page.tsx`) — it renders the whole system on one screen. This project has no unit tests; running the app *is* the validation. Changed a token or a component in `components/ui/`? Look at that page before calling it done.
+
 ## Tailwind v4
 
 **There is no `tailwind.config.js` in this project — do not create one.** v4 is CSS-first: config lives in `app/globals.css`, via `@import "tailwindcss"` and the `@theme inline` block. New tokens (colors, fonts, spacing) go there as custom properties — a `--color-*` defined in `@theme` becomes a utility (`bg-background`, `text-foreground`).
+
+`globals.css` is layered: ZapBot primitives (`--purple-500`, `--neutral-*`) → shadcn's contract (`--primary`, `--background`) pointing at them → utilities. Rebranding means editing a primitive, not a component.
+
+**A `@theme` entry only becomes a utility if Tailwind has a namespace for it.** `--color-*`, `--text-*`, `--radius-*`, `--shadow-*`, `--ease-*` and `--font-*` do. `--duration-*` does **not** — `duration-*` natively takes numbers only, so `duration-fast` is declared by hand with `@utility`. Get this wrong and the class compiles to nothing, silently, with no error. If you add a token and the utility doesn't work, this is why.
 
 Style with utilities in the JSX. Don't write loose CSS or CSS Modules for what a utility solves; `globals.css` is for theme tokens and resets, not component classes. Repeated class strings are solved by extracting a **React component**, not `@apply`.
 
