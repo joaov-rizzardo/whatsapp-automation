@@ -153,7 +153,10 @@ Every user belongs to at least one organization. That layout is the gate for the
 
 `/onboarding` and `/select-organization` live in their own `(org-setup)` group precisely because they must **not** inherit that gate — inside `(app)` they would redirect to themselves forever. They require a session, not an organization.
 
-⚠️ **`router.refresh()` after `organization.create` and `organization.setActive` is not optional.** Without it the Router Cache replays the Server Component rendered for the previous organization, and the switch looks like it did nothing. `create` already activates the organization it creates — don't call `setActive` after it.
+⚠️ **Changing the active organization must fully reset the page.** The active org lives in the server session *and* in Better Auth's client cache, and every page is scoped to it, so a soft `router.push` + `router.refresh` can replay Server Components rendered for the previous org (Router Cache) and leave the app half-switched until a manual reload.
+
+- **Switching** between existing orgs (`organization.setActive`, in `useSelectOrganization`) does a **hard navigation** — `window.location.assign("/dashboard")` — the same clean reset as F5. Switching is rare, so the full reload is worth the correctness.
+- **Creating** the first org (`organization.create`, in `useCreateOrganization`) still uses `router.push` + `router.refresh()` — there's no previous org to leave stale, so the Router Cache invalidation is enough. `create` already activates the org it creates — don't call `setActive` after it.
 
 React Query is for server state on the client — data that needs refetching, polling, a cache shared across components, or user interaction (for WhatsApp: a live message list, connection status). Don't use React Query for what a Server Component already solves, and never fetch with `useEffect` + `useState`.
 
