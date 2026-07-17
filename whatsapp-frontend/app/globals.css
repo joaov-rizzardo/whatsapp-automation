@@ -58,6 +58,13 @@
   --surface-card: var(--neutral-0);
   --surface-sunken: var(--neutral-50);
   --surface-overlay: oklch(0.16 0.01 260 / 0.4);
+  /*
+   * Chrome da área logada (fundo da sidebar + moldura do painel inset). Mais
+   * fundo que a página e com um leve tom lavanda — dá a profundidade "mesa →
+   * painel → card" do macOS e tira o ar clínico de tudo-branco. Não é a página:
+   * é a superfície sobre a qual o conteúdo flutua.
+   */
+  --surface-shell: oklch(0.955 0.03 300);
 
   --border-subtle: var(--neutral-200);
   --border-default: var(--neutral-300);
@@ -139,13 +146,14 @@
   --chart-4: var(--warning);
   --chart-5: var(--purple-300);
 
-  --sidebar: var(--surface-card);
+  --sidebar: var(--surface-shell);
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--text-on-brand);
-  --sidebar-accent: var(--brand-subtle);
+  /* Hover states in the menu pick up the brand rather than a dead gray. */
+  --sidebar-accent: var(--purple-100);
   --sidebar-accent-foreground: var(--purple-700);
-  --sidebar-border: var(--border-subtle);
+  --sidebar-border: var(--brand-subtle-border);
   --sidebar-ring: var(--focus-ring);
 }
 

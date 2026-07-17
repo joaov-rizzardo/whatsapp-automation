@@ -5,16 +5,7 @@ import { ChevronRight, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSelectOrganization } from "@/features/organizations/hooks/useSelectOrganization";
 import type { Organization } from "@/features/organizations/schemas/organizationSchema";
-
-function initialsOf(name: string): string {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-}
+import { initialsOf } from "@/lib/initials";
 
 export function OrganizationList({
   organizations,
