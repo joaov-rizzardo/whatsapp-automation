@@ -34,6 +34,25 @@ services:
     networks:
       - whatsapp-automation
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-whatsapp}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-whatsapp}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"        # AMQP — o backend no host conecta aqui
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672" # management UI — inspecionar topologia
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whatsapp-automation
+
   evolution-api:
     image: evoapicloud/evolution-api:v2.3.7
     restart: unless-stopped
@@ -57,16 +76,29 @@ services:
       CACHE_REDIS_SAVE_INSTANCES: "false"
       CACHE_LOCAL_ENABLED: "false"
       AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      # QR Code rendered in the ZapBot brand purple (--purple-500 / --brand).
+      QRCODE_COLOR: "#8B3AE5"
+      # --- Transporte de eventos: RabbitMQ global, só os 2 eventos da spec 003 ---
+      # Os eventos da Evolution chegam ao backend por RabbitMQ, não por webhook HTTP
+      # (spec 003 §3). Sem webhook, a Evolution não precisa alcançar o backend —
+      # por isso extra_hosts/host.docker.internal saiu.
+      RABBITMQ_ENABLED: "true"
+      RABBITMQ_URI: "amqp://${RABBITMQ_USER:-whatsapp}:${RABBITMQ_PASSWORD:-whatsapp}@rabbitmq:5672/"
+      RABBITMQ_EXCHANGE_NAME: "evolution"
+      RABBITMQ_GLOBAL_ENABLED: "true"
+      RABBITMQ_EVENTS_QRCODE_UPDATED: "true"
+      RABBITMQ_EVENTS_CONNECTION_UPDATE: "true"
+      # todos os outros RABBITMQ_EVENTS_* são "false" por default — não reativar
     ports:
       - "${EVOLUTION_PORT:-8080}:8080"
     volumes:
       - evolution_instances:/evolution/instances
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - whatsapp-automation
@@ -79,3 +111,4 @@ volumes:
   postgres_data:
   redis_data:
   evolution_instances:
+  rabbitmq_data:
