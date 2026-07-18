@@ -120,3 +120,22 @@ model Invitation {
   @@index([email])
   @@map("invitation")
 }
+
+/// One WhatsApp connection per organization (spec 003). Our own table — no FK to
+/// the Better Auth `organization` table; organizationId only ever arrives via
+/// request.organizationId. Updated by the routes (user actions) and by the
+/// evolution-events consumer (Evolution events resolved by instanceName).
+model WhatsappConnection {
+  id             String   @id @default(cuid())
+  organizationId String   @unique
+  instanceName   String   @unique
+  status         String   @default("connecting") // connecting | open | close
+  method         String   @default("qrcode") // qrcode | pairing — last method requested
+  qrCode         String?  @db.Text // QR data URI (qrcode method); Text — a base64 PNG overflows varchar
+  pairingCode    String? // 8-char code (pairing method)
+  phoneNumber    String? // number given for pairing and/or the connected number
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("whatsapp_connection")
+}

@@ -3,10 +3,12 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { env } from "./config/env.js";
 import authPlugin from "./plugins/auth.js";
 import errorHandlerPlugin from "./plugins/error-handler.js";
+import evolutionPlugin from "./plugins/evolution.js";
 import prismaPlugin from "./plugins/prisma.js";
 import requireAuthPlugin from "./plugins/require-auth.js";
 import requireOrganizationPlugin from "./plugins/require-organization.js";
 import { meRoutes } from "./modules/me/me.routes.js";
+import { whatsappConnectionRoutes } from "./modules/whatsapp-connection/whatsapp-connection.routes.js";
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({
@@ -19,6 +21,7 @@ export function buildApp(): FastifyInstance {
   app.register(authPlugin);
   app.register(requireAuthPlugin);
   app.register(requireOrganizationPlugin);
+  app.register(evolutionPlugin);
   app.register(errorHandlerPlugin);
 
   app.get("/health", async () => {
@@ -26,6 +29,7 @@ export function buildApp(): FastifyInstance {
   });
 
   app.register(meRoutes);
+  app.register(whatsappConnectionRoutes);
 
   return app;
 }
