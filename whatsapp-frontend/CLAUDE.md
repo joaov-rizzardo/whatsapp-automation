@@ -6,7 +6,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # whatsapp-frontend
 
-Stack: Next.js 16.2 (App Router) · React 19.2 · TypeScript strict · Tailwind v4 · shadcn/ui (base Radix) · React Query (client-side fetching — **not installed yet**, see Data fetching) · React Hook Form + Zod (forms) · Better Auth (session).
+Stack: Next.js 16.2 (App Router) · React 19.2 · TypeScript strict · Tailwind v4 · shadcn/ui (base Radix) · React Query (client-side fetching — installed with `features/whatsapp/`, spec 003) · React Hook Form + Zod (forms) · Better Auth (session).
 
 **We do not write unit tests in this project.** Validate changes by running the app (`npm run dev`), not by writing tests.
 
@@ -136,7 +136,7 @@ The project rule: **Server Component when the data can be fetched on the server;
 
 `features/auth/` uses **`authClient.useSession()`** from Better Auth (`lib/auth-client.ts`), not React Query. This is deliberate — please don't "fix" it. Better Auth ships its own session cache and reactivity; putting React Query on top would mean two sources of truth for the same session.
 
-React Query is not installed at all today. It arrives with the first real data feature (conversations, messages) — and even then, auth stays on `useSession()`.
+React Query arrived with `features/whatsapp/` (spec 003), the first real client-side data feature and the precedent to follow: `schemas/` (Zod) → `api/` (`fetch` with `credentials: "include"`) → `hooks/useWhatsappConnection.ts` (`useQuery` + `useMutation`, a short `refetchInterval` while `connecting`) → presentational card + a thin container that owns the hook. Even so, auth and organizations stay on Better Auth's `useSession()`/`useListOrganizations()`.
 
 **`features/organizations/` follows the same exception**, for the same reason: the Better Auth organization plugin ships `useListOrganizations()` and `useActiveOrganization()` with their own cache and reactivity. Wrapping them in React Query would mean two sources of truth for one session. Don't.
 
@@ -160,7 +160,7 @@ Every user belongs to at least one organization. That layout is the gate for the
 
 React Query is for server state on the client — data that needs refetching, polling, a cache shared across components, or user interaction (for WhatsApp: a live message list, connection status). Don't use React Query for what a Server Component already solves, and never fetch with `useEffect` + `useState`.
 
-Setup (none of this is installed yet — when installing, check the current pattern at https://tanstack.com/query/latest/docs/framework/react/guides/advanced-ssr):
+Setup (done in spec 003 — `app/providers.tsx` + `lib/get-query-client.ts`; the pattern reference is https://tanstack.com/query/latest/docs/framework/react/guides/advanced-ssr):
 
 - `QueryClientProvider` lives in a Client Component (`app/providers.tsx`) mounted in `RootLayout`. The provider is a client component; the layout stays a server component.
 - **Never share a `QueryClient` across requests.** On the server, create a new one per request; in the browser, use a singleton (this avoids recreating it if React suspends on the first render).

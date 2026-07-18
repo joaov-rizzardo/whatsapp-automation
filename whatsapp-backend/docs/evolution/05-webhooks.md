@@ -249,6 +249,78 @@ Dois níveis `[fonte: env.example + código]`:
 As envs `WEBHOOK_EVENTS_*` (`true`/`false`) definem quais eventos o servidor emite **globalmente** —
 funcionam como filtro geral. Se um evento está `false` ali, `[não verificado — confirmar se isso bloqueia também os webhooks por instância]`.
 
+## RabbitMQ em modo global — topologia real capturada (2026-07-17, v2.3.7)
+
+O projeto usa **RabbitMQ, não webhook** (spec 003). Com `RABBITMQ_ENABLED=true` +
+`RABBITMQ_GLOBAL_ENABLED=true` + `RABBITMQ_EXCHANGE_NAME=evolution` e só
+`RABBITMQ_EVENTS_QRCODE_UPDATED`/`RABBITMQ_EVENTS_CONNECTION_UPDATE` ligados, foi capturado no
+management UI (`http://localhost:15672`):
+
+- **Exchange**: `evolution`, tipo **`topic`**, `durable: true`. É a Evolution que a declara.
+- **Filas auto-criadas pela Evolution** (uma por evento, ninguém as consome por padrão):
+  `evolution.connection.update` e `evolution.qrcode.updated`, ambas `durable`.
+- **Routing key com que a Evolution publica**: **minúscula com ponto** — `connection.update`,
+  `qrcode.updated`. (A Evolution também cria um binding redundante em MAIÚSCULA_UNDERSCORE
+  `CONNECTION_UPDATE` para a fila dela; o que ela *publica* é a minúscula.) Nosso consumer declara a
+  **própria** fila `whatsapp-backend.evolution-events` e faz bind nas duas variantes para ser robusto.
+
+### Payload real de `CONNECTION_UPDATE` (routing key `connection.update`)
+
+```json
+{
+  "event": "connection.update",
+  "instance": "minha-instancia",
+  "data": {
+    "instance": "minha-instancia",
+    "wuid": "5511999998888@s.whatsapp.net",
+    "profileName": "Fulano",
+    "profilePictureUrl": null,
+    "state": "open",
+    "statusReason": 200
+  },
+  "server_url": "http://localhost:8080",
+  "date_time": "2026-07-17T20:36:28.384Z",
+  "sender": "5511999998888@s.whatsapp.net",
+  "apikey": null
+}
+```
+
+- `data.state` — `open` | `connecting` | `close` (estados do Baileys). É o que vira nosso `status`.
+- `data.wuid` — JID conectado; o número sai daqui (`wuid.split("@")[0]`) quando `open`. **É PII: guardar
+  em `phoneNumber`, nunca logar.**
+- Diferente do webhook, o envelope aqui **não** tem `destination`; `apikey` vem `null`.
+
+### Payload real de `QRCODE_UPDATED` (routing key `qrcode.updated`)
+
+```json
+{
+  "event": "qrcode.updated",
+  "instance": "zzz-capture-test",
+  "data": {
+    "qrcode": {
+      "instance": "zzz-capture-test",
+      "pairingCode": null,
+      "code": "2@99wbWb+B3g6...",
+      "base64": "data:image/png;base64,iVBORw0KGgo..."
+    }
+  },
+  "server_url": "http://localhost:8080",
+  "date_time": "2026-07-17T20:42:00.421Z",
+  "apikey": null
+}
+```
+
+- O QR fica **aninhado** em `data.qrcode.base64` (data URI, ~13 KB) / `data.qrcode.code`. Cuidado: **não**
+  é `data.base64` como no `connect` síncrono.
+
+### Pairing via `?number=` — divergência observada
+
+`GET /instance/connect/{instance}?number=5511999998888` (número **inválido/de teste**) devolveu
+`{ pairingCode: null, code: "2@...", base64: "data:...", count: 1 }` — ou seja, **caiu no QR**, não gerou
+pairing code. A hipótese é que o pairing exige um número **válido e real** (e um aparelho para digitar o
+código). Portanto o caminho de pairing só se confirma na verificação manual com celular real; o código do
+backend trata `pairingCode` possivelmente `null` sem quebrar. `[verificação manual pendente — spec 003 §6]`
+
 ## Alternativas ao webhook
 
 Mesmo modelo de eventos, transportes diferentes `[fonte: env.example]`:

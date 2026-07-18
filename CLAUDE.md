@@ -53,11 +53,11 @@ Next 16 and Prisma 7 both contain breaking changes you will otherwise get wrong 
 
 ## Current state
 
-**Authentication and organizations exist end to end** — they are the first real features and the reference for the ones that follow.
+**Authentication, organizations, and WhatsApp connection exist end to end** — they are the first real features and the reference for the ones that follow.
 
 Backend: Prisma 7 + PostgreSQL, Vitest, `config/env.ts`, the `plugins/` layer (prisma, auth, require-auth, error-handler), Better Auth serving `/api/auth/*`, and a protected `GET /api/me`. Email/password and Google sign-in, with the session in a cookie.
 
-Frontend: shadcn/ui (Radix base) with the ZapBot design system — tokens in `app/globals.css`, components in `components/ui/`, docs in `whatsapp-frontend/docs/design-system/`, visual check at `/design-system`. Working `/login` and `/register`, a protected `/dashboard`, and `proxy.ts`. React Hook Form and Zod are installed; **React Query is not** — see the frontend CLAUDE.md for why auth deliberately does not use it.
+Frontend: shadcn/ui (Radix base) with the ZapBot design system — tokens in `app/globals.css`, components in `components/ui/`, docs in `whatsapp-frontend/docs/design-system/`, visual check at `/design-system`. Working `/login` and `/register`, a protected `/dashboard`, and `proxy.ts`. React Hook Form and Zod are installed, and **React Query too** (installed with the WhatsApp feature, spec 003) — but auth and organizations deliberately stay on Better Auth's own hooks, see the frontend CLAUDE.md.
 
 Google sign-in only works once `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are filled in `whatsapp-backend/.env`; without them the provider is skipped and email/password still works.
 
@@ -65,6 +65,8 @@ Google sign-in only works once `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` are f
 
 The rule that protects every feature still to come: **`organizationId` comes from the session via `requireOrganization`, never from the payload**, and every per-organization query filters by it. Both CLAUDE.md files spell this out — read them before the first feature route.
 
-Both sides must be running for anything crossing the boundary, and PostgreSQL must be up (`docker compose up -d` at the root).
+**WhatsApp connection (spec 003) exists end to end via a self-hosted Evolution API.** `docker compose up -d` now also brings up **Evolution API** and **RabbitMQ** (alongside Postgres and Redis). An organization connects one number by **QR Code or pairing code** (`/whatsapp`), sees it go online, and can disconnect. Evolution publishes its events to **RabbitMQ** (not a webhook); the backend runs a **second process** — a dedicated `worker.ts` consumer — that updates our own `whatsapp_connection` table, which the frontend polls with React Query. Running the backend for a boundary-crossing feature now means **two processes**: `npm run dev` (HTTP) and `npm run dev:worker` (consumer).
+
+Both sides must be running for anything crossing the boundary, and PostgreSQL, Evolution and RabbitMQ must be up (`docker compose up -d` at the root).
 
 Beyond auth, the architecture in both CLAUDE.md files is still the **target**, not a description of what exists. Don't assume a file described there is already on disk.

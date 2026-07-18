@@ -6,13 +6,17 @@ Node.js + TypeScript + Fastify backend for the WhatsApp automation project. Data
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Runs the server with `tsx watch` (hot reload) |
+| `npm run dev` | Runs the **HTTP server** with `tsx watch` (hot reload) |
+| `npm run dev:worker` | Runs the **queue worker** with `tsx watch` (the evolution-events consumer) |
 | `npm run build` | Type-checks and emits to `dist/` |
-| `npm start` | Runs the compiled build |
+| `npm start` | Runs the compiled HTTP server |
+| `npm run start:worker` | Runs the compiled worker |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Test suite (see Testing) |
 
 Server reads `PORT` (default 3333) and `HOST` (default `0.0.0.0`) from the environment.
+
+**The backend is two processes** (since spec 003): the HTTP server (`server.ts`) and a dedicated worker (`worker.ts`) that consumes Evolution events from RabbitMQ. Both share the same codebase, infra plugins and services — they only differ in entrypoint. For any feature that consumes the queue, run both (`npm run dev` **and** `npm run dev:worker`).
 
 ## Architecture
 
@@ -20,23 +24,34 @@ A modular monolith. Feature modules are self-contained and split into three laye
 
 ```
 src/
-  server.ts              # entrypoint: env, listen, signals. Nothing else.
-  app.ts                 # buildApp(): assembles plugins + modules, no listen()
+  server.ts              # HTTP entrypoint: env, listen, signals. Nothing else.
+  worker.ts              # queue entrypoint: same plugins, ready() not listen()
+  app.ts                 # buildApp(): assembles HTTP plugins + modules, no listen()
   config/
     env.ts               # parses and validates process.env, exported as a typed object
+  lib/                   # framework-agnostic infra clients + providers
+    logger/logger.ts     # the Logger provider injected into services (see Logging)
+    evolution/           # thin HTTP client for the Evolution API
   plugins/               # cross-cutting concerns, each wrapped in fastify-plugin
     prisma.ts            # decorates app.prisma, closes client on shutdown
+    evolution.ts         # decorates app.evolution (HTTP client; stateless)
+    rabbitmq.ts          # decorates app.amqp (managed connection; worker only)
     error-handler.ts     # maps domain errors -> HTTP responses
   modules/
     <feature>/
-      <feature>.routes.ts       # HTTP layer: route schema + thin handler
+      <feature>.routes.ts       # HTTP input adapter: route schema + thin handler
       <feature>.service.ts      # business rules. Framework-agnostic.
       <feature>.repository.ts   # the ONLY place that touches Prisma
       <feature>.schema.ts       # request/response schemas and inferred types
       <feature>.test.ts         # tests live next to the code
+    evolution-events/           # QUEUE input adapter: the consumer counterpart of routes.ts
+      evolution-events.consumer.ts   # parses, normalizes, routes to a service, ack/nack/DLQ
+      evolution-events.topology.ts   # exchange/queue/routing keys/DLX in one place
   shared/
     errors.ts            # domain error classes
 ```
+
+**Two entrypoints, one codebase.** `server.ts` opens the HTTP socket; `worker.ts` builds a Fastify instance only to reuse the plugin system, logger and graceful shutdown, registers `prisma`+`evolution`+`rabbitmq`+the consumer, and calls `app.ready()` — **never `listen()`**. `listen()` stays exclusive to `server.ts`. A service is the unit both processes share: the same `WhatsappConnectionService` is driven by HTTP routes (user actions) and by the queue consumer (`handleEvolutionEvent`), which is exactly what its framework-independence buys.
 
 ### The dependency rule
 
@@ -120,7 +135,8 @@ Working rules:
 - `strict` TypeScript. No `any`; use `unknown` and narrow. No non-null `!` to silence the compiler — handle the null case.
 - `async`/`await` throughout; no floating promises.
 - Filenames kebab-case, matching their module role (`send-message.service.ts`).
-- Use the Fastify logger (`app.log` / `request.log`), never `console.log`. Logs are structured JSON — pass objects, and never log tokens, phone numbers, or message contents.
+- Use the Fastify logger (`app.log` / `request.log`) in plugins and routes, never `console.log`. Logs are structured JSON — pass objects, and never log tokens, phone numbers, or message contents.
+- **Services and the consumer take a `Logger` (the provider in `lib/logger/logger.ts`), not `app.log`.** They are framework-agnostic and must not import fastify, so they can't reach for `app.log` directly. The provider is a structural subset of pino, so the composition roots pass a scoped child — `app.log.child({ module: "..." })` — into the constructor, and `silentLogger` stands in for tests. This is how business code logs without breaking the layering rule.
 
 ## Current state
 
@@ -129,13 +145,20 @@ Authentication is implemented and is the first real vertical slice:
 - `config/env.ts` (Zod, crashes at boot on a bad env), `plugins/` (`prisma`, `auth`, `require-auth`, `require-organization`, `error-handler`), `shared/errors.ts`, `lib/auth.ts`.
 - Better Auth serves `/api/auth/*`; `modules/me/` is a protected `GET /api/me` and the reference for the route shape.
 - Prisma 7 + PostgreSQL with the `add_auth` and `add_organizations` migrations; Vitest against the real database (`npm test`).
-- Organizations via the Better Auth `organization` plugin, and `requireOrganization` — the gate every per-organization feature route is meant to use. No production route consumes it yet; `plugins/require-organization.test.ts` is what covers it.
+- Organizations via the Better Auth `organization` plugin, and `requireOrganization` — the gate every per-organization feature route uses. `plugins/require-organization.test.ts` and `modules/whatsapp-connection` both exercise it.
 
-`npm run dev` needs PostgreSQL up (`docker compose up -d` at the repo root) and a `.env` — copy `.env.example`. The generated Prisma client is gitignored, so a fresh clone runs `prisma generate` (wired to `postinstall`).
+WhatsApp connection is the first real feature vertical slice (spec 003):
 
-No type provider (TypeBox / `json-schema-to-ts`) is installed yet — routes declare plain JSON Schema. Install one when the first route needs a typed body.
+- `modules/whatsapp-connection/` (routes → service → repository, TDD) — `GET`/`POST`/`DELETE /api/whatsapp/connection`, plus `handleEvolutionEvent` on the service, driven by the queue.
+- `modules/evolution-events/` — the RabbitMQ **consumer**, the precedent for a queue input adapter (thin: parse, normalize the event name, call the service, ack/nack/DLQ; no business logic).
+- `plugins/evolution.ts` (HTTP client) and `plugins/rabbitmq.ts` (managed AMQP connection, worker only); `worker.ts`, the second entrypoint; `lib/logger/` (the Logger provider) and `lib/evolution/`.
+- Migration `add_whatsapp_connection` (our own `whatsapp_connection` table — no FK to Better Auth's tables).
 
-`modules/` beyond `me/` is still the **target**, not what exists.
+`npm run dev` needs PostgreSQL up, and the WhatsApp feature also needs Evolution + RabbitMQ (`docker compose up -d` at the repo root) and a `.env` — copy `.env.example`. The generated Prisma client is gitignored, so a fresh clone runs `prisma generate` (wired to `postinstall`).
+
+`json-schema-to-ts` is installed and used by `whatsapp-connection.schema.ts` (`FromSchema`) — the first route with a typed body. Other routes may still declare plain JSON Schema.
+
+Modules beyond `me/`, `whatsapp-connection/` and `evolution-events/` are still the **target**, not what exists.
 
 ## Better Auth and the layering rule
 
@@ -163,3 +186,9 @@ If the id came from the payload, any authenticated user would read and write ano
 The active organization lives in `session.activeOrganizationId`, chosen at session creation by the `databaseHooks.session.create.before` hook in `lib/auth.ts` — exactly one organization is auto-activated, zero or several leave it null. That hook is the single place the 0/1/N rule lives.
 
 ⚠️ `session.cookieCache` is off, so `getSession` always reads a fresh `activeOrganizationId`. Turning it on makes the active organization travel signed inside the cookie and go stale for up to `maxAge` after a `set-active` — the user switches organization and keeps seeing the previous one.
+
+### The rule extends to the queue consumer: `instanceName` is never chosen by the payload
+
+The `whatsapp_connection.instanceName` is the organization's `slug`, frozen on the row at creation. The routes read `request.organizationId` (the session) and look up the slug in our database — never from the body. The **consumer** faces hostile input (the broker payload carries an `instance` field anyone could forge), so it only ever *finds* the row by `findByInstanceName` — it never *chooses* an organization from the payload. An unknown instance is a permanent error → dead-lettered, not requeued.
+
+**`method` and `phoneNumber` MAY come from the POST body** — they are legitimate user input (which connection method, which number to pair), validated by the route schema and re-checked in the service. This does **not** weaken the rule: the rule is specifically about `organizationId`/`instanceName`, the fields that decide *whose* data you touch. A number to pair is not one of those.

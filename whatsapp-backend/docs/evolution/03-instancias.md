@@ -75,9 +75,11 @@ Numa UI, não trate conectar como request/response: renderize o QR e **escute `Q
 `GET /instance/connectionState/{instance}` `[fonte: spec 2.1.1]`
 
 Os estados vêm do Baileys: tipicamente `open` (conectado), `connecting`, `close`.
-`[não verificado — confirmar os valores exatos e o formato do envelope da resposta]`
 
-O mesmo estado chega, de forma assíncrona, no evento `CONNECTION_UPDATE`.
+O mesmo estado chega, de forma assíncrona, no evento `CONNECTION_UPDATE` — **confirmado por captura
+(2026-07-17, v2.3.7)**: `data.state = "open"` numa instância conectada (ver
+[05-webhooks.md](05-webhooks.md) para o payload real). O `connect` (QR) devolveu, também confirmado,
+`{ pairingCode: null, code: "2@...", base64: "data:image/png;base64,...", count: 1 }`.
 
 ## Ciclo de vida real
 
@@ -97,6 +99,22 @@ delete / logout
 > **Regra de projeto:** um app de automação **precisa** tratar desconexão como estado normal, não como
 > exceção. Sessão Baileys cai (celular sem bateria, WhatsApp Web deslogado noutro lugar, rede). O app
 > deve persistir o estado por instância, alertar quando cair e ter caminho de re-scan.
+
+## Quirks observados (2026-07-17, v2.3.7) — pairing e logout
+
+Dois comportamentos capturados na implementação da spec 003, que exigem tratamento no backend:
+
+- **O primeiro `connect` logo após `create` devolve `pairingCode: null`** (socket Baileys ainda não
+  pronto). O `pairingCode` só aparece a partir da **segunda** chamada de `connect`. O serviço
+  reexecuta o `connect` (com `?number=`) até o código vir — senão o usuário precisaria clicar duas
+  vezes / recarregar. (QR não sofre disso: o `base64` já vem na 1ª chamada, e `QRCODE_UPDATED` cobre o
+  resto.)
+- **`logout` seguido de `delete` imediato corre contra a desvinculação.** O `logout` envia o "unpair"
+  pelo socket; o `delete` derruba o socket. Deletar na sequência pode matar o socket antes do unpair
+  chegar ao celular — o aparelho continua mostrando o dispositivo conectado. O serviço espera ~1,5 s
+  entre `logout` e `delete`. Depois disso a instância some do `fetchInstances` de forma limpa.
+- **Cor do QR**: `QRCODE_COLOR` (env da Evolution) define a cor dos módulos no `base64`. Default
+  `#175197`; o projeto usa o roxo da marca `#8B3AE5` (= `--purple-500`).
 
 ## Notas operacionais
 
