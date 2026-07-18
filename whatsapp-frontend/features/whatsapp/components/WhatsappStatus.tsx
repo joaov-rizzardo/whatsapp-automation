@@ -10,16 +10,18 @@ import {
 } from "@/components/ui/sidebar";
 import { useWhatsappConnection } from "@/features/whatsapp/hooks/useWhatsappConnection";
 import { statusPresentation } from "@/features/whatsapp/lib/statusPresentation";
+import { toSidebarStatus } from "@/features/whatsapp/lib/toSidebarStatus";
 import { cn } from "@/lib/utils";
 
 /**
- * Sidebar section reporting whether the WhatsApp number is connected. For now
- * it links to Configurações, where connecting/disconnecting the phone will live
- * once the Evolution API integration is wired.
+ * Sidebar section reporting whether the WhatsApp number is connected. Links to
+ * /whatsapp, where connecting/disconnecting the phone lives.
  */
 export function WhatsappStatus() {
-  const { status } = useWhatsappConnection();
-  const { label, dotClassName, pulse } = statusPresentation(status);
+  const { connection } = useWhatsappConnection();
+  const { label, dotClassName, pulse } = statusPresentation(
+    toSidebarStatus(connection?.status),
+  );
 
   return (
     <SidebarMenu>
@@ -30,7 +32,7 @@ export function WhatsappStatus() {
           tooltip={`WhatsApp: ${label}`}
           className="no-underline hover:no-underline"
         >
-          <Link href="/configuracoes">
+          <Link href="/whatsapp">
             <span className="relative flex shrink-0 items-center justify-center">
               <Smartphone className="text-muted-foreground" />
               <span

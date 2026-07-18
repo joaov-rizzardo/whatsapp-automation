@@ -45,7 +45,7 @@ export default async function DashboardPage() {
         </CardHeader>
         <CardContent>
           <Button asChild>
-            <Link href="/configuracoes">
+            <Link href="/whatsapp">
               Conectar WhatsApp
               <ArrowRight className="size-4" />
             </Link>

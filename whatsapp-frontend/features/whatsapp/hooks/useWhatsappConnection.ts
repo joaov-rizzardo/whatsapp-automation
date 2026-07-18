@@ -1,19 +1,57 @@
 "use client";
 
-import type { WhatsappConnectionStatus } from "@/features/whatsapp/types/connectionStatus";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-type WhatsappConnection = {
-  status: WhatsappConnectionStatus;
-  isLoading: boolean;
-};
+import { createConnection } from "@/features/whatsapp/api/createConnection";
+import { deleteConnection } from "@/features/whatsapp/api/deleteConnection";
+import { getConnection } from "@/features/whatsapp/api/getConnection";
+import type {
+  Connection,
+  ConnectInput,
+} from "@/features/whatsapp/schemas/connectionSchema";
+
+const connectionKey = ["whatsapp", "connection"] as const;
 
 /**
- * Placeholder until the Evolution API integration exists. There is no backend
- * endpoint for connection status yet, so this reports "disconnected" rather than
- * inventing a value. When the endpoint lands this becomes a React Query hook
- * (server state on the client) polling the instance's connection state, and the
- * component below does not change.
+ * Server state for the organization's WhatsApp connection — the first
+ * client-side data feature in the app (spec 003). The source of truth is our own
+ * table, updated by the worker from Evolution's RabbitMQ events, so the UI just
+ * polls it while connecting: no WebSocket, no polling against Evolution.
  */
-export function useWhatsappConnection(): WhatsappConnection {
-  return { status: "disconnected", isLoading: false };
+export function useWhatsappConnection() {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: connectionKey,
+    queryFn: getConnection,
+    // Poll only while connecting; once open/close there is nothing to wait for.
+    // The same event (CONNECTION_UPDATE) resolves both QR and pairing.
+    refetchInterval: (q) =>
+      q.state.data?.status === "connecting" ? 3000 : false,
+  });
+
+  const write = (connection: Connection) =>
+    queryClient.setQueryData(connectionKey, connection);
+
+  const connectMutation = useMutation({
+    mutationFn: (input: ConnectInput) => createConnection(input),
+    onSuccess: write,
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: deleteConnection,
+    onSuccess: () => write(null),
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  return {
+    connection: query.data ?? null,
+    isLoading: query.isLoading,
+    connect: connectMutation.mutate,
+    disconnect: disconnectMutation.mutate,
+    isConnecting: connectMutation.isPending,
+    isDisconnecting: disconnectMutation.isPending,
+  };
 }
