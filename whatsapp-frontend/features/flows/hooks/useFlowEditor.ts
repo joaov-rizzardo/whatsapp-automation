@@ -10,6 +10,7 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
+import { toast } from "sonner";
 
 import { getDefinition } from "@/features/flows/blocks/registry";
 import { startDefinition } from "@/features/flows/blocks/start/definition";
@@ -78,6 +79,32 @@ export function useFlowEditor() {
     [setNodes],
   );
 
+  // Prototype "save": there's no backend yet, so we log the current flow as the
+  // JSON shape a future persistence endpoint would receive, and confirm to the
+  // user. Only the fields that describe the flow — not React Flow's transient UI
+  // state (measured size, selection, dragging).
+  const saveFlow = useCallback(() => {
+    const snapshot = {
+      nodes: nodes.map(({ id, type, position, data }) => ({
+        id,
+        type,
+        position,
+        data,
+      })),
+      edges: edges.map(({ id, source, target, sourceHandle, targetHandle }) => ({
+        id,
+        source,
+        target,
+        sourceHandle,
+        targetHandle,
+      })),
+    };
+    console.log("[flow] snapshot", snapshot);
+    toast.success("Fluxo salvo", {
+      description: `${snapshot.nodes.length} bloco(s) e ${snapshot.edges.length} conexão(ões) — veja o console.`,
+    });
+  }, [nodes, edges]);
+
   const openConfig = useCallback((nodeId: string) => {
     setActiveNodeId(nodeId);
   }, []);
@@ -96,6 +123,7 @@ export function useFlowEditor() {
     onDragOver,
     addNode,
     updateNodeData,
+    saveFlow,
     activeNodeId,
     openConfig,
     closeConfig,

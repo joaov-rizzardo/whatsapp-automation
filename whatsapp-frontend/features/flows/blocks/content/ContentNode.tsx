@@ -25,8 +25,8 @@ export function ContentNode({ id, type, data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        "flex w-56 flex-col gap-2 rounded-lg border border-border bg-card p-3 shadow-sm transition-shadow",
-        selected && "ring-2 ring-ring ring-offset-2 ring-offset-background",
+        "flex w-56 flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-sm transition-all duration-base ease-standard hover:-translate-y-0.5 hover:shadow-md",
+        selected && "border-primary/40 ring-2 ring-ring ring-offset-2 ring-offset-background",
       )}
     >
       <div className="flex items-center gap-2">

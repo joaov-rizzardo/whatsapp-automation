@@ -35,7 +35,7 @@ export function BlockPalette() {
                 );
                 event.dataTransfer.effectAllowed = "move";
               }}
-              className="flex cursor-grab items-center gap-2 rounded-md border border-border bg-card px-3 py-2 shadow-xs transition-colors hover:border-primary/40 active:cursor-grabbing"
+              className="flex cursor-grab items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-xs transition-all duration-base ease-standard hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:cursor-grabbing"
             >
               <span className="flex size-7 items-center justify-center rounded-md bg-brand-subtle text-primary">
                 <Icon className="size-4" />

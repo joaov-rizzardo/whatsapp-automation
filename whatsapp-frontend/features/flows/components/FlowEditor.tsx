@@ -7,6 +7,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useFlowEditor } from "@/features/flows/hooks/useFlowEditor";
 import { BlockPalette } from "@/features/flows/components/BlockPalette";
 import { FlowCanvas } from "@/features/flows/components/FlowCanvas";
+import { FlowToolbar } from "@/features/flows/components/FlowToolbar";
 import { FlowActionsProvider } from "@/features/flows/components/FlowActionsContext";
 import { NodeConfigModal } from "@/features/flows/components/NodeConfigModal";
 
@@ -41,6 +42,7 @@ function FlowEditorInner() {
             onDrop={editor.onDrop}
             onDragOver={editor.onDragOver}
           />
+          <FlowToolbar onSave={editor.saveFlow} />
         </div>
       </div>
 
