@@ -244,6 +244,24 @@ The short version:
 
 **Verify visually at `/design-system`** (`app/design-system/page.tsx`) — it renders the whole system on one screen. This project has no unit tests; running the app *is* the validation. Changed a token or a component in `components/ui/`? Look at that page before calling it done.
 
+## Flow editor — the block registry (`features/flows/`)
+
+The chatbot flow editor (spec 004) is a **frontend-only prototype**: reachable only by typing `/fluxos/editor` (no menu link), no persistence — state lives in React Flow's memory and resets on refresh. It uses **`@xyflow/react`** (React Flow v12; the old `reactflow` package is discontinued), which entered the project here. Its CSS is imported **once**, in `FlowEditor.tsx` (`import "@xyflow/react/dist/style.css"`), never in `globals.css`.
+
+Unlike `features/whatsapp/`, this feature has **no `api/` or `schemas/`** — it's pure UI + local state (`blocks/ → lib/ → hooks/ → components/`).
+
+**Every block type is a `BlockDefinition` (`blocks/types.ts`) — data, not code branches.** A definition declares its handles, colour token, icon, default data, node component, and optional config modal. The registry (`blocks/registry.ts`) derives everything else from it: React Flow's `nodeTypes`, the palette's addable items, and node/modal lookup are all `Object.values(blockRegistry)`. **Adding a block is a new definition, never an editor refactor:**
+
+1. Create `blocks/<name>/definition.ts` (via `defineBlock<YourData>({...})`), its `<Name>Node.tsx`, and — if it configures anything — its `<Name>Modal.tsx`.
+2. Register it in `blocks/registry.ts`. The canvas, palette and modal host don't change.
+
+Non-negotiables that keep this extensible:
+
+- **Nodes render handles by mapping `definition.handles`** (via `<BlockHandles>`), never a hardcoded `<Handle>`. This is what makes "N outputs" (a future "randomizar" block) just another definition.
+- **`defineBlock` erases the per-block `Data` type for storage** in the heterogeneous registry — the standard existential-type move. The one place an untyped node `data` meets a typed modal is `NodeConfigModal` (the modal host); that boundary cast is intentional and contained. Don't reach for `any`.
+- **The anchor (`start`) is `singleton: true` + `addable: false`.** `createNode` sets `deletable: false` from `singleton`, so React Flow itself blocks deletion — no custom `onNodesChange` filtering.
+- Nodes reach editor actions (opening their modal) through `FlowActionsContext`, since React Flow only hands a node its `NodeProps`.
+
 ## Tailwind v4
 
 **There is no `tailwind.config.js` in this project — do not create one.** v4 is CSS-first: config lives in `app/globals.css`, via `@import "tailwindcss"` and the `@theme inline` block. New tokens (colors, fonts, spacing) go there as custom properties — a `--color-*` defined in `@theme` becomes a utility (`bg-background`, `text-foreground`).

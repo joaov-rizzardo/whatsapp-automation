@@ -69,4 +69,6 @@ The rule that protects every feature still to come: **`organizationId` comes fro
 
 Both sides must be running for anything crossing the boundary, and PostgreSQL, Evolution and RabbitMQ must be up (`docker compose up -d` at the root).
 
+**The chatbot flow editor (spec 004) exists as a frontend-only prototype.** No backend, no persistence — it doesn't touch the API or the database. Reachable only by typing `/fluxos/editor` (no menu link); state lives in React Flow's memory and resets on refresh. It's built on **`@xyflow/react`** (React Flow v12, new to the project) around an **extensible block registry** (`features/flows/blocks/`): a block type is a data-only definition, and adding one doesn't touch the editor. Two block types today (a start anchor and a text-content block) prove the registry. See `whatsapp-frontend/CLAUDE.md`. Persistence (schema + API + backend), the start block's trigger, and richer block types (randomize, media, buttons, branch-by-reply) are the next step.
+
 Beyond auth, the architecture in both CLAUDE.md files is still the **target**, not a description of what exists. Don't assume a file described there is already on disk.
