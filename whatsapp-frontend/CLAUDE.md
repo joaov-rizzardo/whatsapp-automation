@@ -258,8 +258,10 @@ Unlike `features/whatsapp/`, this feature has **no `api/` or `schemas/`** — it
 Non-negotiables that keep this extensible:
 
 - **Nodes render handles by mapping `definition.handles`** (via `<BlockHandles>`), never a hardcoded `<Handle>`. This is what makes "N outputs" (a future "randomizar" block) just another definition.
+- **Nodes render their header buttons via `<BlockActions>`**, same idea: it derives the gear from `definition.modal` and the bin from `definition.singleton`, so a new block type gets both affordances without touching it.
 - **`defineBlock` erases the per-block `Data` type for storage** in the heterogeneous registry — the standard existential-type move. The one place an untyped node `data` meets a typed modal is `NodeConfigModal` (the modal host); that boundary cast is intentional and contained. Don't reach for `any`.
-- **The anchor (`start`) is `singleton: true` + `addable: false`.** `createNode` sets `deletable: false` from `singleton`, so React Flow itself blocks deletion — no custom `onNodesChange` filtering.
+- **The anchor (`start`) is `singleton: true` + `addable: false`.** `createNode` sets `deletable: false` from `singleton`, so React Flow itself blocks deletion — no custom `onNodesChange` filtering. Deleting goes through React Flow throughout: `deleteKeyCode` is `["Delete", "Backspace"]` on the canvas, and the bin button calls `deleteElements` (which also drops the node's edges). Never filter `nodes`/`edges` by hand to remove something.
+- **Connections are one custom edge type, `FlowEdge`.** Its selected highlight is painted inline (thicker path, darker brand tone, halo) because React Flow's `.selected` rules live in an unlayered stylesheet that Tailwind utilities can't override. Selecting an edge and pressing Delete/Backspace is the only way to remove one.
 - Nodes reach editor actions (opening their modal) through `FlowActionsContext`, since React Flow only hands a node its `NodeProps`.
 
 ## Tailwind v4

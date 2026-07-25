@@ -28,7 +28,7 @@ const initialNodes: Node[] = [createNode(startDefinition, { x: 0, y: 0 })];
 export function useFlowEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, deleteElements } = useReactFlow();
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
 
   // Respects `sourceHandle`/`targetHandle`, so N-output blocks connect the
@@ -67,6 +67,17 @@ export function useFlowEditor() {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
   }, []);
+
+  // The bin button in a block's header. Goes through React Flow's own removal
+  // path (`deleteElements`) rather than filtering `nodes` by hand, so it also
+  // drops the node's edges and honours `deletable: false` — the anchor can't be
+  // removed here either, exactly as with the Delete/Backspace keys.
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      void deleteElements({ nodes: [{ id: nodeId }] });
+    },
+    [deleteElements],
+  );
 
   const updateNodeData = useCallback(
     (nodeId: string, data: Record<string, unknown>) => {
@@ -122,6 +133,7 @@ export function useFlowEditor() {
     onDrop,
     onDragOver,
     addNode,
+    deleteNode,
     updateNodeData,
     saveFlow,
     activeNodeId,

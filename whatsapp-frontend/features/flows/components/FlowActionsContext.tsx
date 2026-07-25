@@ -4,11 +4,13 @@ import { createContext, useContext } from "react";
 
 /**
  * Node components only receive `NodeProps` from React Flow, so editor actions a
- * node needs to trigger (opening its config modal) reach it through context
- * rather than through node data. The provider wraps the canvas in FlowEditor.
+ * node needs to trigger (opening its config modal, deleting itself) reach it
+ * through context rather than through node data. The provider wraps the canvas
+ * in FlowEditor.
  */
 type FlowActions = {
   openConfig: (nodeId: string) => void;
+  deleteNode: (nodeId: string) => void;
 };
 
 const FlowActionsContext = createContext<FlowActions | null>(null);

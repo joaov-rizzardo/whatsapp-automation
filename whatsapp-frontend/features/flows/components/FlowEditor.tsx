@@ -2,6 +2,7 @@
 
 import "@xyflow/react/dist/style.css";
 
+import { useMemo } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 
 import { useFlowEditor } from "@/features/flows/hooks/useFlowEditor";
@@ -28,8 +29,15 @@ export function FlowEditor() {
 function FlowEditorInner() {
   const editor = useFlowEditor();
 
+  // Memoised so a node re-renders because its own data changed, not because the
+  // editor did.
+  const actions = useMemo(
+    () => ({ openConfig: editor.openConfig, deleteNode: editor.deleteNode }),
+    [editor.openConfig, editor.deleteNode],
+  );
+
   return (
-    <FlowActionsProvider value={{ openConfig: editor.openConfig }}>
+    <FlowActionsProvider value={actions}>
       <div className="flex h-full w-full">
         <BlockPalette />
         <div className="relative flex-1">

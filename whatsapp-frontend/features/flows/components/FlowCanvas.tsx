@@ -8,6 +8,7 @@ import {
   ReactFlow,
   type DefaultEdgeOptions,
   type Edge,
+  type EdgeTypes,
   type Node,
   type OnConnect,
   type OnEdgesChange,
@@ -15,6 +16,7 @@ import {
 } from "@xyflow/react";
 
 import { nodeTypes } from "@/features/flows/blocks/registry";
+import { FlowEdge } from "@/features/flows/components/FlowEdge";
 
 type Props = {
   nodes: Node[];
@@ -26,16 +28,27 @@ type Props = {
   onDragOver: (event: React.DragEvent) => void;
 };
 
+/** Module-level, like `nodeTypes`, so the reference stays stable. */
+const edgeTypes: EdgeTypes = { flow: FlowEdge };
+
 /**
- * Edges default to a smooth brand-coloured line that flows — one shared accent
- * across the canvas. Design tokens are referenced by CSS var so a rebrand needs
- * no change here.
+ * Every connection is a `FlowEdge` — a smooth brand-coloured line that flows,
+ * one shared accent across the canvas, which also paints its own selected
+ * highlight. Design tokens are referenced by CSS var so a rebrand needs no
+ * change here.
  */
 const defaultEdgeOptions: DefaultEdgeOptions = {
-  type: "smoothstep",
+  type: "flow",
   animated: true,
-  style: { stroke: "var(--brand)", strokeWidth: 2 },
 };
+
+/**
+ * Delete and Backspace both remove whatever is selected — nodes and edges
+ * alike. React Flow's default is Backspace only, which reads as broken on a
+ * full-size keyboard. Non-deletable nodes (the anchor) are skipped by React
+ * Flow itself, so there's nothing to filter here.
+ */
+const deleteKeyCode = ["Delete", "Backspace"];
 
 /**
  * The React Flow canvas. `nodeTypes` comes from the registry (module-level, so
@@ -63,7 +76,9 @@ export function FlowCanvas({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
+        deleteKeyCode={deleteKeyCode}
         fitView
       >
         <Background

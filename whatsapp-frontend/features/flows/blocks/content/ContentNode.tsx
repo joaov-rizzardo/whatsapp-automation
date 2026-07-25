@@ -1,21 +1,19 @@
 "use client";
 
-import { Settings } from "lucide-react";
 import type { NodeProps } from "@xyflow/react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { BlockActions } from "@/features/flows/blocks/BlockActions";
 import { BlockHandles } from "@/features/flows/blocks/BlockHandles";
 import { getDefinition } from "@/features/flows/blocks/registry";
-import { useFlowActions } from "@/features/flows/components/FlowActionsContext";
 
 /**
- * A content block: header (icon + "Conteúdo" + gear that opens the config
- * modal), a preview of the message text, and input/output handles mapped from
- * the definition. A plain click only selects; the gear opens config.
+ * A content block: header (icon + "Conteúdo" + the gear/bin actions), a preview
+ * of the message text, and input/output handles mapped from the definition. A
+ * plain click only selects — the gear opens config, the bin removes the block
+ * (Delete/Backspace does the same once it's selected).
  */
 export function ContentNode({ id, type, data, selected }: NodeProps) {
-  const { openConfig } = useFlowActions();
   const definition = getDefinition(type ?? "");
   if (!definition) return null;
 
@@ -36,17 +34,13 @@ export function ContentNode({ id, type, data, selected }: NodeProps) {
         <span className="flex-1 font-heading text-sm font-medium text-foreground">
           {definition.label}
         </span>
-        {/* nodrag: the gear must not start a node drag */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="nodrag -mr-1"
-          onClick={() => openConfig(id)}
-          aria-label="Configurar bloco"
-        >
-          <Settings className="size-4" />
-        </Button>
+        <div className="-mr-1">
+          <BlockActions
+            nodeId={id}
+            configurable={Boolean(definition.modal)}
+            deletable={!definition.singleton}
+          />
+        </div>
       </div>
 
       <p
