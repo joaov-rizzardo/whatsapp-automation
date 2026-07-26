@@ -194,8 +194,6 @@ export class WhatsappConnectionService {
 
     const result = await this.connectInstance(instanceName, method, phoneNumber);
 
-    console.log("----------------------------", result)
-
     // qrcode fills qrCode and zeroes pairingCode; pairing does the inverse —
     // never both at once.
     const row = await this.repository.upsert({
