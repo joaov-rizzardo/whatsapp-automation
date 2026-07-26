@@ -54,7 +54,15 @@ if (0 === data[this.name].events.length) {
 
 Um bot que responde a todo `MESSAGES_UPSERT` responde a si mesmo — **loop infinito**, cobrando tokens
 e queimando o número. Filtre por `data.key.fromMe`.
-`[não verificado — confirmar o nome exato do campo numa amostra real]`
+`[verificado 2026-07-26 — o campo é `key.fromMe` (booleano), e uma mensagem enviada pelo próprio número
+conectado chega com ele `true`. Amostra em 05-webhooks.md.]`
+
+Duas coisas que a mesma captura mostrou e que atrapalham quem tenta filtrar de outro jeito:
+
+- **`key.remoteJid` numa mensagem sua é o destinatário**, não você — não dá para reconhecer o eco
+  comparando JIDs.
+- **`sender`, no envelope, é sempre o dono da instância**, em mensagem recebida ou enviada. Ele não
+  serve para saber quem escreveu.
 
 ## 5. 🔴 Retry agressivo: handler lento gera duplicata
 

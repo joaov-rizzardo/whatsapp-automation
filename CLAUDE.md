@@ -85,6 +85,10 @@ Six block types today — start anchor (which now carries the flow's **trigger**
 
 The **trigger** is the concept the two screens share (`types/automationTrigger.ts` + `lib/describeTrigger.ts`, at the root for that reason) — and now they sync: the backend derives it from the start block on every save, into a column the list reads.
 
-Next: **the execution engine** — consume `MESSAGES_UPSERT` from RabbitMQ, match the message against the trigger of the organization's published versions, and walk the document with an `execute` per block in the backend registry. Then richer block types (media, buttons, lists).
+**Receiving messages (spec 007) is done, and it is the engine's input half.** Evolution now also publishes `MESSAGES_UPSERT`, on its **own queue** (`whatsapp-backend.inbound-messages`) with its own consumer in the same worker — messages are the highest-volume event, and sharing a queue would leave a `CONNECTION_UPDATE` waiting behind a burst of them. `modules/inbound-messages/` is the first module fed only by a queue (no routes, no repository, no table yet).
+
+Its point is not text — it is the **second registry**: `parsers/`, where **a message type is one file**. Text is implemented; anything else (image, audio, sticker) is recognized, logged as `unsupported` with the raw type that names the file to write next, and acked — never dead-lettered, because a type we have not written yet is normal traffic. Three filters exist from day one, all before any database query: `fromMe` (a bot that answers everything answers itself), group/broadcast, and messages older than 5 minutes (Baileys replays history when a number connects). For now it only **logs** who wrote and what — including PII, deliberately and temporarily, until persistence lands.
+
+Next: **the execution engine** — take the normalized `InboundMessage`, match it against the trigger of the organization's published versions, and walk the document with an `execute` per block in the backend registry. Then richer block types (media, buttons, lists).
 
 Beyond auth, the architecture in both CLAUDE.md files is still the **target**, not a description of what exists. Don't assume a file described there is already on disk.

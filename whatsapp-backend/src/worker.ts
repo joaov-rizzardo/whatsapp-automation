@@ -5,6 +5,7 @@ import evolutionPlugin from "./plugins/evolution.js";
 import prismaPlugin from "./plugins/prisma.js";
 import rabbitmqPlugin from "./plugins/rabbitmq.js";
 import evolutionEventsConsumer from "./modules/evolution-events/evolution-events.consumer.js";
+import inboundMessagesConsumer from "./modules/evolution-events/inbound-messages.consumer.js";
 
 /**
  * The backend's second process. It mirrors server.ts in shape but never opens a
@@ -23,8 +24,9 @@ async function start(): Promise<void> {
     await app.register(evolutionPlugin);
     await app.register(rabbitmqPlugin);
     await app.register(evolutionEventsConsumer);
-    await app.ready(); // the consumer's onReady starts consuming here
-    app.log.info("worker ready, consuming evolution events");
+    await app.register(inboundMessagesConsumer);
+    await app.ready(); // each consumer's onReady starts consuming here
+    app.log.info("worker ready, consuming evolution events and inbound messages");
   } catch (err) {
     app.log.error(err, "worker failed to start");
     process.exit(1);

@@ -44,9 +44,11 @@ src/
       <feature>.repository.ts   # the ONLY place that touches Prisma
       <feature>.schema.ts       # request/response schemas and inferred types
       <feature>.test.ts         # tests live next to the code
-    evolution-events/           # QUEUE input adapter: the consumer counterpart of routes.ts
-      evolution-events.consumer.ts   # parses, normalizes, routes to a service, ack/nack/DLQ
-      evolution-events.topology.ts   # exchange/queue/routing keys/DLX in one place
+    evolution-events/           # QUEUE input adapters: the consumer counterpart of routes.ts
+      evolution-events.runner.ts     # shared: declares topology, consumes, owns ack/nack/DLQ
+      evolution-events.consumer.ts   # connection.update + qrcode.updated -> WhatsappConnectionService
+      inbound-messages.consumer.ts   # messages.upsert -> InboundMessageService
+      evolution-events.topology.ts   # exchange/queues/routing keys/DLX in one place
   shared/
     errors.ts            # domain error classes
 ```
@@ -162,13 +164,23 @@ Automations and flows are the second feature slice (spec 006) and the first one 
 - `flow_draft.version` is an **optimistic lock**: the version is part of the `WHERE` of the update, so two tabs never overwrite each other — the second gets **409 `FLOW_VERSION_CONFLICT`**. `FlowVersion` is immutable: only `INSERT` and the cascade's `DELETE`.
 - Migration `add_automations_and_flows` (`automation`, `flow_draft`, `flow_version` — again with no FK to Better Auth's tables). `ajv` became a direct dependency here.
 
-**Rule this feature adds, for every nested resource that follows: look it up by `(id, organizationId)`, and answer 404 — never 403.** The repository deliberately exposes no `findById(id)`. A 403 would confirm that the resource exists, which is exactly what an id from another organization must not learn. `automations.test.ts`/`flow.test.ts` assert it on every `:id` route.
+Inbound messages are the third slice (spec 007) and the **second registry**:
+
+- `modules/inbound-messages/` — the first module fed **only by a queue**: no `routes.ts`, no `repository.ts`, no table. `normalizer` (pure) → `service` (filters + log) → the execution engine, when it lands.
+- **`parsers/` is the registry: one message type is one file.** A parser declares the `data.message` keys it owns (text owns `conversation` — and only that: Evolution flattens `extendedTextMessage`, see `docs/evolution/05-webhooks.md`) and returns an `InboundContent`. Adding image/audio/video must touch nothing else — not the consumer, not the service, not the normalizer. An unknown key becomes `{ kind: "unsupported", rawType }`, which is **acked and logged, never dead-lettered**: a type we have not written yet is normal traffic, not an error.
+- **Two queues, one exchange, one runner.** `messages.upsert` has its own queue and prefetch so a burst of messages never leaves a `CONNECTION_UPDATE` waiting behind it; `evolution-events.runner.ts` holds the ack/nack/DLQ policy both consumers share.
+- **Validation is layered by how much we control the shape** (spec 007 §4.6): the envelope and the core of `data` get Ajv schemas (failure → dead letter); the per-type node is read defensively inside its parser (failure → `unsupported`). Everywhere: `additionalProperties: true`, and `required` only on fields we actually read — the captured payload already carries fields no doc mentions (`remoteJidAlt`, `addressingMode`), and a newer Evolution will add more.
+- Three filters that exist from day one, all before any query: `key.fromMe` (a bot that answers everything answers itself), group/broadcast, and messages older than 5 minutes (Baileys replays history on connect).
+
+> ⚠️ **One deliberate, temporary exception to the logging rule below:** `inbound-messages.service.ts` logs the sender's number, name and message text, marked `// PII — temporário (spec 007 §4.7)`. It exists because there is no persistence yet, so the log is the only way to verify the right message arrived. **It comes out when messages are persisted** — the log goes back to `{ instanceName, kind, externalId }`.
+
+**Rule the automations feature adds, for every nested resource that follows: look it up by `(id, organizationId)`, and answer 404 — never 403.** The repository deliberately exposes no `findById(id)`. A 403 would confirm that the resource exists, which is exactly what an id from another organization must not learn. `automations.test.ts`/`flow.test.ts` assert it on every `:id` route.
 
 `npm run dev` needs PostgreSQL up, and the WhatsApp feature also needs Evolution + RabbitMQ (`docker compose up -d` at the repo root) and a `.env` — copy `.env.example`. The generated Prisma client is gitignored, so a fresh clone runs `prisma generate` (wired to `postinstall`).
 
 `json-schema-to-ts` is installed and used by `whatsapp-connection.schema.ts` (`FromSchema`) — the first route with a typed body. Other routes may still declare plain JSON Schema.
 
-Modules beyond `me/`, `whatsapp-connection/`, `evolution-events/` and `automations/` are still the **target**, not what exists.
+Modules beyond `me/`, `whatsapp-connection/`, `evolution-events/`, `automations/` and `inbound-messages/` are still the **target**, not what exists.
 
 ## Better Auth and the layering rule
 

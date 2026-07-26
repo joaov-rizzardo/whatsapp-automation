@@ -321,6 +321,95 @@ pairing code. A hipótese é que o pairing exige um número **válido e real** (
 código). Portanto o caminho de pairing só se confirma na verificação manual com celular real; o código do
 backend trata `pairingCode` possivelmente `null` sem quebrar. `[verificação manual pendente — spec 003 §6]`
 
+### Payload real de `MESSAGES_UPSERT` (routing key `messages.upsert`) — capturado 2026-07-26
+
+Capturado com `RABBITMQ_EVENTS_MESSAGES_UPSERT=true` (spec 007), instância Baileys real, mensagem de
+texto simples vinda de um contato:
+
+```json
+{
+  "event": "messages.upsert",
+  "instance": "vex-software-5f81089e",
+  "data": {
+    "key": {
+      "remoteJid": "5511956291095@s.whatsapp.net",
+      "remoteJidAlt": "5511956291095@s.whatsapp.net",
+      "fromMe": false,
+      "id": "AC9103D165AE397609A6A20D78FF248E",
+      "participant": "",
+      "addressingMode": "lid"
+    },
+    "pushName": "João",
+    "status": "DELIVERY_ACK",
+    "message": {
+      "conversation": "Mensagem de teste",
+      "messageContextInfo": { "deviceListMetadataVersion": 2, "…": "…" }
+    },
+    "messageType": "conversation",
+    "messageTimestamp": 1785100386,
+    "instanceId": "628e74c4-f457-463e-a903-113e19b8e794",
+    "source": "android"
+  },
+  "server_url": "http://localhost:8080",
+  "date_time": "2026-07-26T18:13:30.262Z",
+  "sender": "573180969737@s.whatsapp.net",
+  "apikey": null
+}
+```
+
+O que a captura resolveu (e que não estava documentado em lugar nenhum):
+
+- **`data` é UMA mensagem, não `{ messages: [...] }`.** O Baileys emite array; a Evolution desempacota
+  antes de publicar. Um evento, uma mensagem.
+- **⚠️ `data.message` carrega metadado junto do conteúdo, e ele pode vir PRIMEIRO.**
+  `messageContextInfo` (metadados de criptografia/dispositivo) aparece ao lado de `conversation`, e numa
+  das amostras veio antes. **Pegar `Object.keys(data.message)[0]` para descobrir o tipo lê a chave
+  errada** — é preciso pular as chaves de metadado. Foi o achado mais caro da captura.
+- **`key.participant` vem como string VAZIA (`""`) numa conversa 1:1**, não ausente. Testar
+  `if (participant)` funciona; `if ("participant" in key)` não.
+- **`key.fromMe`** é o campo do eco — confirma a armadilha #4, que estava `[não verificado]`.
+- **`messageTimestamp` é inteiro em segundos** (não milissegundos, não string). Note que o mesmo payload
+  serializa outros timestamps como `{low, high, unsigned}` dentro de `messageContextInfo` — por isso vale
+  tolerar string ao ler.
+- **`sender` do envelope é o dono da instância** (o número conectado), **não** quem escreveu a mensagem.
+  Quem escreveu está em `key.remoteJid` (ou `key.participant`, em grupo). Confundir os dois faz o bot
+  responder a si mesmo.
+- Campos novos que nenhuma doc menciona: `remoteJidAlt`, `addressingMode: "lid"`, `status`. São a razão
+  de todo schema de leitura usar `additionalProperties: true`.
+
+### ⚠️ A Evolution ACHATA o `extendedTextMessage` — capturado 2026-07-26
+
+No Baileys cru, texto tem duas formas: `conversation` (simples) e `extendedTextMessage` (com citação ou
+preview de link). **Na Evolution v2.3.7, a segunda não chega.** Respondendo com citação e mandando
+links, de várias formas, o payload sempre veio como:
+
+```json
+{
+  "message": { "conversation": "Teste" },
+  "messageType": "conversation",
+  "contextInfo": {
+    "stanzaId": "A5C6199A603479DA189DBC0EB1FE83D7",
+    "participant": "84761901039625@lid",
+    "quotedMessage": { "conversation": "Opa" },
+    "mentionedJid": [], "groupMentions": []
+  }
+}
+```
+
+Ou seja: a Evolution **sobe o `contextInfo` para o nível de `data`** (irmão de `message`, não dentro
+dele) e deixa o texto em `message.conversation`. Consequências para quem escreve o parser:
+
+- **Não escreva um parser para `extendedTextMessage`** — a chave nunca aparece. Texto é `conversation`,
+  e só. (Escrever de memória a partir do Baileys leva direto a esse erro.)
+- **Uma resposta com citação é indistinguível de um texto normal** olhando só `message`. Quem quiser
+  saber a qual mensagem ela responde tem que ler `data.contextInfo.stanzaId` (o id da mensagem citada) e
+  `data.contextInfo.participant` (quem a escreveu).
+- `mentionedJid` e `groupMentions` também moram lá — é onde procurar menções.
+
+`[não verificado]` — o `message.imageMessage` de uma imagem real (as amostras de imagem no arquivo de
+captura eram sintéticas). Nenhum código depende disso: uma chave sem parser vira `unsupported` com o
+nome dela, seja qual for.
+
 ## Alternativas ao webhook
 
 Mesmo modelo de eventos, transportes diferentes `[fonte: env.example]`:

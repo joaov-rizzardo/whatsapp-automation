@@ -88,7 +88,12 @@ services:
       RABBITMQ_GLOBAL_ENABLED: "true"
       RABBITMQ_EVENTS_QRCODE_UPDATED: "true"
       RABBITMQ_EVENTS_CONNECTION_UPDATE: "true"
-      # todos os outros RABBITMQ_EVENTS_* são "false" por default — não reativar
+      # --- spec 007: as mensagens recebidas pelo número conectado ---
+      RABBITMQ_EVENTS_MESSAGES_UPSERT: "true"
+      # todos os outros RABBITMQ_EVENTS_* são "false" por default — não reativar.
+      # Em especial MESSAGES_SET, que despeja o histórico inteiro na sincronização
+      # inicial (seria receber duas vezes o que o UPSERT já traz), e
+      # PRESENCE_UPDATE/CHATS_SET/CONTACTS_SET, que são ruído de alto volume.
     ports:
       - "${EVOLUTION_PORT:-8080}:8080"
     volumes:
