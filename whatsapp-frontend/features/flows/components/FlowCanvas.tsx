@@ -13,6 +13,7 @@ import {
   type OnConnect,
   type OnEdgesChange,
   type OnNodesChange,
+  type Viewport,
 } from "@xyflow/react";
 
 import { nodeTypes } from "@/features/flows/blocks/registry";
@@ -21,6 +22,8 @@ import { FlowEdge } from "@/features/flows/components/FlowEdge";
 type Props = {
   nodes: Node[];
   edges: Edge[];
+  /** O enquadramento salvo com o fluxo. Ausente = fluxo novo, `fitView`. */
+  defaultViewport?: Viewport;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
@@ -61,6 +64,7 @@ const deleteKeyCode = ["Delete", "Backspace"];
 export function FlowCanvas({
   nodes,
   edges,
+  defaultViewport,
   onNodesChange,
   onEdgesChange,
   onConnect,
@@ -79,7 +83,10 @@ export function FlowCanvas({
         edgeTypes={edgeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
         deleteKeyCode={deleteKeyCode}
-        fitView
+        defaultViewport={defaultViewport}
+        // Enquadrar sozinho só quando não há enquadramento salvo: um `fitView`
+        // incondicional jogaria fora a posição em que o usuário deixou o canvas.
+        fitView={!defaultViewport}
       >
         <Background
           variant={BackgroundVariant.Dots}

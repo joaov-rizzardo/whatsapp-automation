@@ -25,8 +25,8 @@ function SummaryTile({
 }
 
 /**
- * A leitura de painel do topo: quantas automações estão de pé e quanta conversa
- * elas geraram. Tiles neutros de propósito — a ênfase da tela é o botão primário.
+ * A leitura de painel do topo: quantas automações estão de pé, e quantas ao
+ * todo. Tiles neutros de propósito — a ênfase da tela é o botão primário.
  */
 export function AutomationsSummary({ summary }: { summary: AutomationsSummaryData }) {
   return (
@@ -47,8 +47,8 @@ export function AutomationsSummary({ summary }: { summary: AutomationsSummaryDat
         dotClass={automationStatusMeta.draft.dotClass}
       />
       <SummaryTile
-        value={formatCount(summary.conversations)}
-        label="conversas · últimos 7 dias"
+        value={formatCount(summary.total)}
+        label={summary.total === 1 ? "automação" : "automações"}
       />
     </div>
   );

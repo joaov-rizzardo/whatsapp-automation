@@ -6,8 +6,6 @@ import { systemVariables } from "@/features/flows/lib/systemVariables";
 import type { NewVariableInput } from "@/features/flows/schemas/variable";
 import type { FlowVariable } from "@/features/flows/types/variable";
 
-let sequence = 0;
-
 /**
  * The flow's custom variables. The panel is the single source of truth: a block
  * can only point at something declared here, so there is no such thing as a
@@ -18,20 +16,25 @@ let sequence = 0;
  * body references it by name (`{{nome}}`), and that has to be rewritten. The
  * editor passes `onRename` to do it; this hook stays unaware of nodes.
  *
- * No persistence (spec 004, decision 4): refresh clears these along with the
- * canvas.
+ * They are persisted with the flow (spec 006): the list arrives already parsed
+ * from the loaded document, and every change to it is picked up by the autosave
+ * — the hook itself still knows nothing about the network.
  */
 export function useFlowVariables({
   onRename,
+  initialVariables,
 }: {
   onRename: (from: string, to: string) => void;
+  initialVariables: FlowVariable[];
 }) {
-  const [customVariables, setCustomVariables] = useState<FlowVariable[]>([]);
+  const [customVariables, setCustomVariables] =
+    useState<FlowVariable[]>(initialVariables);
 
   const createVariable = useCallback((input: NewVariableInput) => {
-    sequence += 1;
+    // Sem contador de módulo: ele reiniciaria em zero a cada carregamento e
+    // daria a uma variável nova o id de uma que já veio do servidor.
     const variable: FlowVariable = {
-      id: `var-${sequence}`,
+      id: `var-${crypto.randomUUID().slice(0, 8)}`,
       name: input.name,
       type: input.type,
       initialValue: input.initialValue,

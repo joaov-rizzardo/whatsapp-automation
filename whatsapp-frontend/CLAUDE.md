@@ -246,9 +246,9 @@ The short version:
 
 ## Flow editor — the block registry (`features/flows/`)
 
-The chatbot flow editor (specs 004 and 005) is **frontend-only**: it lives at `/automacoes/[id]/editor` (reached from the automations list), with no persistence — the id is in the URL, but nothing is loaded or saved by it, and state lives in React Flow's memory and resets on refresh. It uses **`@xyflow/react`** (React Flow v12; the old `reactflow` package is discontinued), which entered the project here. Its CSS is imported **once**, in `FlowEditor.tsx` (`import "@xyflow/react/dist/style.css"`), never in `globals.css`.
+The chatbot flow editor (specs 004, 005 and 006) lives at `/automacoes/[id]/editor`, reached from the automations list. The id in the URL is the automation's real id (a cuid), and **the flow is loaded and saved by it**. It uses **`@xyflow/react`** (React Flow v12; the old `reactflow` package is discontinued), which entered the project here. Its CSS is imported **once**, in `FlowEditor.tsx` (`import "@xyflow/react/dist/style.css"`), never in `globals.css`.
 
-Unlike `features/whatsapp/`, this feature has **no `api/`** — it's pure UI + local state (`blocks/ → lib/ → hooks/ → components/`). It does have `schemas/` and `types/`, but for the variable form and local shapes, not for the network.
+The feature now **does have an `api/`** (spec 006): `getFlow` / `saveFlowDraft` / `publishFlow`, over `lib/http.ts` — the client that exists so the editor can tell *which* error came back (a 409 for the autosave, a 422 with per-block issues for Publicar). `schemas/flowDocument.ts` is the network contract; `schemas/variable.ts` is still the form.
 
 **Every block type is a `BlockDefinition` (`blocks/types.ts`) — data, not code branches.** A definition declares its handles, category, icon, default data, node component, optional config modal, and the optional hooks below. The registry (`blocks/registry.ts`) derives everything else from it: React Flow's `nodeTypes`, the palette's grouped items, and node/modal lookup. **Adding a block is a new definition, never an editor refactor:**
 
@@ -267,19 +267,42 @@ Non-negotiables that keep this extensible:
 - **Connections are one custom edge type, `FlowEdge`.** Its selected highlight is painted inline (thicker path, darker brand tone, halo) because React Flow's `.selected` rules live in an unlayered stylesheet that Tailwind utilities can't override. Selecting an edge and pressing Delete/Backspace is the only way to remove one.
 - Nodes reach editor actions (opening their modal) through `FlowActionsContext`, since React Flow only hands a node its `NodeProps`.
 
+### Loading and saving (spec 006)
+
+**The container loads, the editor edits.** `FlowEditorPage` owns `useFlowDocument` and renders `<FlowEditor key={automationId} flow={…}>` **only after the document arrives**. That order is not cosmetic: mounting the editor is what arms the autosave, and an autosave over an empty canvas while the `GET` is still in flight would erase the user's flow. `useFlowEditor` has no initial state of its own any more — it takes `{ automationId, initialDocument, initialVersion }`.
+
+**`serializeFlow` normalises; `deserializeFlow` defends.** Serialising drops everything React Flow hangs on a node that doesn't describe the flow (`selected`, `dragging`, `measured`, `width`…) — without that, clicking a block would be a change worth saving. Deserialising recomputes `deletable` from the registry (a tampered document must not make the anchor deletable), **drops nodes of unknown types** with their edges (React Flow would otherwise blow up on a missing `nodeType`) and re-applies `type: "flow"` to every edge, because `defaultEdgeOptions` only covers edges created by connecting.
+
+**The autosave (`useFlowAutosave`) is five rules, and none of them leak into a component:**
+
+1. **It compares fingerprints, not events.** `fingerprintDocument` is the normalised document as a string, minus the viewport; equal string, no request. This — not the debounce — is what makes selecting, hovering and zooming free.
+2. Debounce of 1.2 s with a **10 s ceiling**, so a long drag can't postpone saving forever.
+3. **One request at a time**, with at most one coalesced save queued behind it. Two concurrent saves would 409 against each other.
+4. `visibilitychange → hidden` flushes; `beforeunload` warns. No `sendBeacon` — it doesn't carry credentials cross-origin, and the API is on `:3333`.
+5. Network error → two retries, then "Erro ao salvar" with the dirty state intact. **409 is different**: it stops the autosave for good and opens a blocking dialog offering to reload. There is no merge, and pretending otherwise would lose work.
+
+**After every save the flow cache is rewritten with what was just stored** (version included). With `staleTime: Infinity`, leaving the editor and coming back remounts from that cache — a stale version there would 409 the user against themselves.
+
+**Publicar flushes the autosave first** (`useFlowPublish`), because publishing the draft from two seconds ago is the worst kind of bug: silent, and correct on screen.
+
 **Variables** are declared in the sidebar's *Variáveis* tab and nowhere else — the panel is the single source of truth, so a block can only point at something that exists. `useFlowVariables` owns them; `FlowVariablesContext` carries the list and the inline "create one" shortcut into block modals, because the modal host is generic and must not know variables exist. Blocks store a variable's **id**, never its name, so renaming can't break a select. System variables (`lib/systemVariables.ts`) are read-only: comparable, never writable.
 
 ## Automações — a lista (`features/automations/`)
 
-`/automacoes` is **layout only**: no `api/`, no React Query, no persistence. `useAutomationsList` owns the collection in `useState` over `lib/mockAutomations.ts` and exposes filter/search/sort plus the row actions; every component below it is presentational. When persistence lands, that hook becomes `useQuery` + `useMutation` and **no component changes** — that's the point of the split, so don't push fetching down into the row.
+`/automacoes` is backed by the API (spec 006): `schemas/automation.ts` (Zod, the source of the `Automation` type) → `api/` → `useAutomationsList` (`useQuery` + `useMutation`). The mock is gone, and **the promise held**: the hook kept its return surface and no presentational component had to change because of persistence, so don't push fetching down into the row.
+
+Two things the hook does that are worth keeping: activate/pause is the one **optimistic** mutation (the switch has to answer immediately, and the rollback matters because activating without a published version comes back 409 `NOT_PUBLISHED`), and every mutation invalidates `["automations"]`.
+
+**Metrics are gone** (`conversations`, `completionRate`): they need the execution engine, and a fake number is worse than an absent one. The fourth summary tile is the total, and sorting offers "recentes" and "nome".
 
 Two conventions the screen sets for the ones that follow:
 
 - **The row is a link, the controls sit on top.** The name's `after:absolute after:inset-0` covers the whole `<li>`; `AutomationRowActions` is `relative z-10` so the switch and the menu stay clickable. Don't wrap a row in a `<Link>` — it would swallow the interactive controls.
 - **Status and trigger have one home each.** `features/automations/lib/automationStatus.ts` maps status → label + Badge variant. The trigger is shared with the flow editor, so it sits at the root: `types/automationTrigger.ts` (the union) and `lib/describeTrigger.ts` (pt-BR line, `canActivate`, the options offered in the start block's modal). No screen re-invents "Ativa" and no feature re-describes a gatilho.
-- **The list shows the trigger, the start block defines it.** A row without one shows "Definir gatilho" linking to the editor, and the switch stays disabled. With no persistence the two don't sync — setting the trigger in the editor won't change the list.
+- **The list shows the trigger, the start block defines it — and now they sync.** The backend derives `automation.trigger` from the start block on every save, so a trigger set in the editor shows up in the list. A row without one still shows "Definir gatilho" linking to the editor.
+- **The switch has two reasons to be disabled**, and the tooltip says which: no trigger, or never published ("Publique o fluxo para ativar"). An active automation whose draft moved ahead carries an "Alterações não publicadas" badge — the list's half of what the toolbar's dot says.
 
-Relative dates render with `suppressHydrationWarning`: the mock's `updatedAt` is built from `Date.now()` on the server and again on the client. That goes away with the mock.
+`suppressHydrationWarning` on the relative dates is gone with the mock: the list only renders after the query resolves, on the client.
 
 ## Tailwind v4
 

@@ -1,10 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { createAutomation } from "../api/createAutomation";
+import { deleteAutomation } from "../api/deleteAutomation";
+import { duplicateAutomation } from "../api/duplicateAutomation";
+import { listAutomations } from "../api/listAutomations";
+import { updateAutomation } from "../api/updateAutomation";
 import { filterAutomations } from "../lib/filterAutomations";
-import { mockAutomations } from "../lib/mockAutomations";
 import { summarizeAutomations } from "../lib/summarizeAutomations";
 import type {
   Automation,
@@ -12,18 +17,32 @@ import type {
   AutomationStatusFilter,
 } from "../types/automation";
 
+export const automationsKey = ["automations"] as const;
+
 /**
  * Dono da coleção de automações: filtro, busca, ordenação e as ações da linha.
  *
- * Enquanto não há API, a lista vive em `useState` sobre os dados mockados e as
- * ações apenas mexem nesse estado. Quando a persistência entrar, só este arquivo
- * muda — vira `useQuery` + `useMutation` e nenhum componente é tocado.
+ * A coleção vem da API (spec 006) e as ações são mutações; filtro, busca e
+ * ordenação continuam no cliente sobre `query.data`. A superfície de retorno é
+ * a mesma de quando isto era `useState` sobre um mock — nenhum componente
+ * abaixo mudou por causa da persistência, que era exatamente a promessa da
+ * spec 004.
  */
 export function useAutomationsList() {
-  const [automations, setAutomations] = useState<Automation[]>(mockAutomations);
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<AutomationStatusFilter>("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<AutomationSort>("recent");
+
+  const query = useQuery({
+    queryKey: automationsKey,
+    queryFn: listAutomations,
+  });
+
+  const automations = useMemo(() => query.data ?? [], [query.data]);
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: automationsKey });
+  const showError = (error: Error) => toast.error(error.message);
 
   const visible = useMemo(
     () => filterAutomations(automations, { status, search, sort }),
@@ -42,71 +61,71 @@ export function useAutomationsList() {
     [automations.length, summary],
   );
 
-  function updateOne(id: string, patch: (automation: Automation) => Automation) {
-    setAutomations((current) =>
-      current.map((automation) => (automation.id === id ? patch(automation) : automation)),
-    );
-  }
+  const createMutation = useMutation({
+    mutationFn: createAutomation,
+    onSuccess: invalidate,
+    onError: showError,
+  });
 
-  function createAutomation(name: string): Automation {
-    const automation: Automation = {
-      id: crypto.randomUUID(),
-      name,
-      status: "draft",
-      trigger: { kind: "none" },
-      // O editor já nasce com o bloco de início.
-      blockCount: 1,
-      conversations: 0,
-      completionRate: null,
-      updatedAt: new Date().toISOString(),
-    };
+  const renameMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      updateAutomation(id, { name }),
+    onSuccess: () => {
+      void invalidate();
+      toast.success("Automação renomeada");
+    },
+    onError: showError,
+  });
 
-    setAutomations((current) => [automation, ...current]);
-    return automation;
-  }
+  /**
+   * Ativar/pausar é o único com atualização otimista: o switch tem que
+   * responder na hora. O rollback é barato porque a mudança é de um campo só —
+   * e é necessário, porque ativar sem publicação volta 409 do servidor.
+   */
+  const setActiveMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      updateAutomation(id, { isActive: active }),
+    onMutate: async ({ id, active }) => {
+      await queryClient.cancelQueries({ queryKey: automationsKey });
+      const previous = queryClient.getQueryData<Automation[]>(automationsKey);
 
-  function renameAutomation(id: string, name: string) {
-    updateOne(id, (automation) => ({
-      ...automation,
-      name,
-      updatedAt: new Date().toISOString(),
-    }));
-    toast.success("Automação renomeada");
-  }
+      queryClient.setQueryData<Automation[]>(automationsKey, (current) =>
+        current?.map((automation) =>
+          automation.id === id
+            ? { ...automation, status: active ? "active" : "paused" }
+            : automation,
+        ),
+      );
 
-  function setAutomationActive(id: string, active: boolean) {
-    updateOne(id, (automation) => ({
-      ...automation,
-      status: active ? "active" : "paused",
-    }));
-    toast.success(active ? "Automação ativada" : "Automação pausada");
-  }
+      return { previous };
+    },
+    onError: (error: Error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(automationsKey, context.previous);
+      showError(error);
+    },
+    onSuccess: (_data, { active }) => {
+      toast.success(active ? "Automação ativada" : "Automação pausada");
+    },
+    onSettled: invalidate,
+  });
 
-  function duplicateAutomation(id: string) {
-    const source = automations.find((automation) => automation.id === id);
-    if (!source) return;
+  const duplicateMutation = useMutation({
+    mutationFn: duplicateAutomation,
+    onSuccess: () => {
+      void invalidate();
+      toast.success("Automação duplicada");
+    },
+    onError: showError,
+  });
 
-    // A cópia nasce rascunho e zerada: só o desenho do fluxo é duplicado, o
-    // histórico de conversas é da automação original.
-    setAutomations((current) => [
-      {
-        ...source,
-        id: crypto.randomUUID(),
-        name: `${source.name} (cópia)`,
-        status: "draft",
-        conversations: 0,
-        completionRate: null,
-        updatedAt: new Date().toISOString(),
-      },
-      ...current,
-    ]);
-    toast.success("Automação duplicada");
-  }
-
-  function deleteAutomation(id: string) {
-    setAutomations((current) => current.filter((automation) => automation.id !== id));
-    toast.success("Automação excluída");
-  }
+  const deleteMutation = useMutation({
+    mutationFn: deleteAutomation,
+    onSuccess: () => {
+      void invalidate();
+      toast.success("Automação excluída");
+    },
+    onError: showError,
+  });
 
   function clearFilters() {
     setStatus("all");
@@ -123,13 +142,19 @@ export function useAutomationsList() {
     setSearch,
     sort,
     setSort,
+    isLoading: query.isPending,
+    error: query.error,
+    refetch: () => void query.refetch(),
     isEmpty: automations.length === 0,
     hasFilters: status !== "all" || search.trim() !== "",
     clearFilters,
-    createAutomation,
-    renameAutomation,
-    setAutomationActive,
-    duplicateAutomation,
-    deleteAutomation,
+    /** Assíncrona agora: quem cria precisa do id que o servidor gerou. */
+    createAutomation: (name: string) => createMutation.mutateAsync(name),
+    isCreating: createMutation.isPending,
+    renameAutomation: (id: string, name: string) => renameMutation.mutate({ id, name }),
+    setAutomationActive: (id: string, active: boolean) =>
+      setActiveMutation.mutate({ id, active }),
+    duplicateAutomation: (id: string) => duplicateMutation.mutate(id),
+    deleteAutomation: (id: string) => deleteMutation.mutate(id),
   };
 }

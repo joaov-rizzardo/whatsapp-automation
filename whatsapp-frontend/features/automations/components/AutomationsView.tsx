@@ -10,6 +10,8 @@ import { AutomationFormDialog } from "./AutomationFormDialog";
 import { AutomationList } from "./AutomationList";
 import { AutomationsEmptyState } from "./AutomationsEmptyState";
 import { AutomationsHeader } from "./AutomationsHeader";
+import { AutomationsLoadError } from "./AutomationsLoadError";
+import { AutomationsSkeleton } from "./AutomationsSkeleton";
 import { AutomationsSummary } from "./AutomationsSummary";
 import { AutomationsToolbar } from "./AutomationsToolbar";
 import { DeleteAutomationDialog } from "./DeleteAutomationDialog";
@@ -26,18 +28,26 @@ export function AutomationsView() {
   const [formTarget, setFormTarget] = useState<FormTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Automation | null>(null);
 
-  function handleFormSubmit(name: string) {
+  async function handleFormSubmit(name: string) {
     if (!formTarget) return;
 
-    if (formTarget.mode === "create") {
-      const created = list.createAutomation(name);
-      toast.success("Automação criada");
-      router.push(`/automacoes/${created.id}/editor`);
-    } else {
+    if (formTarget.mode === "rename") {
       list.renameAutomation(formTarget.automation.id, name);
+      setFormTarget(null);
+      return;
     }
 
-    setFormTarget(null);
+    // Criar virou assíncrono: o id que vai na URL é o do servidor, então a
+    // navegação espera a resposta. Erro mantém o diálogo aberto (o hook já
+    // mostra o toast).
+    try {
+      const created = await list.createAutomation(name);
+      setFormTarget(null);
+      toast.success("Automação criada");
+      router.push(`/automacoes/${created.id}/editor`);
+    } catch {
+      // Tratado pelo onError da mutação.
+    }
   }
 
   function handleDeleteConfirm() {
@@ -49,11 +59,15 @@ export function AutomationsView() {
   return (
     <>
       <AutomationsHeader
-        showCreateButton={!list.isEmpty}
+        showCreateButton={!list.isEmpty && !list.isLoading && !list.error}
         onCreate={() => setFormTarget({ mode: "create" })}
       />
 
-      {list.isEmpty ? (
+      {list.isLoading ? (
+        <AutomationsSkeleton />
+      ) : list.error ? (
+        <AutomationsLoadError onRetry={list.refetch} />
+      ) : list.isEmpty ? (
         <AutomationsEmptyState onCreate={() => setFormTarget({ mode: "create" })} />
       ) : (
         <>

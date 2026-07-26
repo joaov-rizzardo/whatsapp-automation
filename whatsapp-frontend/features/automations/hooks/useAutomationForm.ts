@@ -19,7 +19,9 @@ export function useAutomationForm({
   onSubmit,
 }: {
   defaultName: string;
-  onSubmit: (input: AutomationFormInput) => void;
+  /** Pode ser assíncrono: criar espera a resposta do servidor, e é isso que
+   *  faz `isSubmitting` valer enquanto a requisição está no ar. */
+  onSubmit: (input: AutomationFormInput) => void | Promise<void>;
 }) {
   const form = useForm<AutomationFormInput>({
     resolver: zodResolver(automationFormSchema),

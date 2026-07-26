@@ -9,29 +9,44 @@ import {
   useUpdateNodeInternals,
   type Connection,
   type Edge,
-  type Node,
 } from "@xyflow/react";
 import { toast } from "sonner";
 
 import { getDefinition } from "@/features/flows/blocks/registry";
-import { startDefinition } from "@/features/flows/blocks/start/definition";
+import { useFlowAutosave } from "@/features/flows/hooks/useFlowAutosave";
 import { createNode } from "@/features/flows/lib/createNode";
+import { deserializeFlow } from "@/features/flows/lib/deserializeFlow";
 import { resolveHandles } from "@/features/flows/lib/resolveHandles";
 import { useFlowVariables } from "@/features/flows/hooks/useFlowVariables";
-
-// Only the anchor on the canvas at first. No persistence — refresh resets here.
-const initialNodes: Node[] = [createNode(startDefinition, { x: 0, y: 0 })];
+import type { FlowDocument } from "@/features/flows/schemas/flowDocument";
 
 /**
  * Owns all editor state and interactions: nodes/edges, connecting, drag-and-drop
  * from the palette, per-node data updates, the flow's variables and which node's
  * config modal is open. Must run inside a <ReactFlowProvider> — it uses
  * `useReactFlow` for `screenToFlowPosition`.
+ *
+ * There is no initial state of its own any more: the flow is **loaded** (spec
+ * 006) and handed in already parsed. The editor is mounted with
+ * `key={automationId}`, so switching automations remounts it rather than
+ * merging two flows' state.
  */
-export function useFlowEditor() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const { screenToFlowPosition, deleteElements } = useReactFlow();
+export function useFlowEditor({
+  automationId,
+  initialDocument,
+  initialVersion,
+}: {
+  automationId: string;
+  initialDocument: FlowDocument;
+  initialVersion: number;
+}) {
+  // Uma vez, na montagem: daqui para a frente quem manda no canvas é o React
+  // Flow, e reprocessar o documento sobrescreveria o que o usuário editou.
+  const [initial] = useState(() => deserializeFlow(initialDocument));
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
+  const { screenToFlowPosition, deleteElements, getViewport } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
 
@@ -66,7 +81,10 @@ export function useFlowEditor() {
     [setNodes],
   );
 
-  const variableState = useFlowVariables({ onRename: renameVariableInNodes });
+  const variableState = useFlowVariables({
+    onRename: renameVariableInNodes,
+    initialVariables: initial.variables,
+  });
   const { variables } = variableState;
 
   // Respects `sourceHandle`/`targetHandle`, so N-output blocks connect the
@@ -173,32 +191,25 @@ export function useFlowEditor() {
     return usage;
   }, [nodes, variables]);
 
-  // Prototype "save": there's no backend yet, so we log the current flow as the
-  // JSON shape a future persistence endpoint would receive, and confirm to the
-  // user. Only the fields that describe the flow — not React Flow's transient UI
-  // state (measured size, selection, dragging).
+  // A persistência inteira (comparação normalizada, debounce com teto,
+  // coalescência, flush na saída, 409) mora no autosave; o editor só lhe entrega
+  // o estado atual e reexporta o que a barra precisa mostrar.
+  const autosave = useFlowAutosave({
+    automationId,
+    initialVersion,
+    initialDocument,
+    nodes,
+    edges,
+    variables: variableState.customVariables,
+    getViewport,
+  });
+
+  /** O botão Salvar: mesmo caminho do autosave, sem esperar o debounce. */
   const saveFlow = useCallback(() => {
-    const snapshot = {
-      variables: variableState.customVariables,
-      nodes: nodes.map(({ id, type, position, data }) => ({
-        id,
-        type,
-        position,
-        data,
-      })),
-      edges: edges.map(({ id, source, target, sourceHandle, targetHandle }) => ({
-        id,
-        source,
-        target,
-        sourceHandle,
-        targetHandle,
-      })),
-    };
-    console.log("[flow] snapshot", snapshot);
-    toast.success("Fluxo salvo", {
-      description: `${snapshot.nodes.length} bloco(s), ${snapshot.edges.length} conexão(ões) e ${snapshot.variables.length} variável(is) — veja o console.`,
+    void autosave.saveNow().then((saved) => {
+      if (saved) toast.success("Fluxo salvo");
     });
-  }, [nodes, edges, variableState.customVariables]);
+  }, [autosave]);
 
   const openConfig = useCallback((nodeId: string) => {
     setActiveNodeId(nodeId);
@@ -224,6 +235,11 @@ export function useFlowEditor() {
     openConfig,
     closeConfig,
     variableUsage,
+    saveState: autosave.saveState,
+    saveNow: autosave.saveNow,
+    conflict: autosave.conflict,
+    droppedNodes: initial.droppedNodes,
+    initialViewport: initial.viewport ?? undefined,
     ...variableState,
   };
 }

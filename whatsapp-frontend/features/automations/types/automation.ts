@@ -1,26 +1,16 @@
-import type { AutomationTrigger } from "@/types/automationTrigger";
+import type { Automation, AutomationStatus } from "../schemas/automation";
 
 /**
- * Uma automação é a entidade de produto; o editor de fluxos edita o miolo dela.
- * Enquanto não existe API, este tipo é a fonte da verdade do formato — quando a
- * persistência chegar, ele passa a sair de um schema Zod da resposta.
+ * O que sobrou de tipo escrito à mão nesta feature: só o que é estado de tela.
+ * A automação em si vem do schema Zod da resposta (`schemas/automation.ts`) —
+ * era isto que a spec 004 antecipava quando dizia "quando a persistência
+ * chegar, o tipo sai de um schema".
+ *
+ * As métricas (`conversations`, `completionRate`) saíram: dependem do motor de
+ * execução, e número falso é pior que número ausente.
  */
-
-export type AutomationStatus = "active" | "paused" | "draft";
-
-export type Automation = {
-  id: string;
-  name: string;
-  status: AutomationStatus;
-  trigger: AutomationTrigger;
-  blockCount: number;
-  /** Conversas iniciadas pela automação nos últimos 7 dias. */
-  conversations: number;
-  /** Fração de 0 a 1, ou null quando a automação nunca rodou. */
-  completionRate: number | null;
-  updatedAt: string;
-};
+export type { Automation, AutomationStatus };
 
 export type AutomationStatusFilter = AutomationStatus | "all";
 
-export type AutomationSort = "recent" | "name" | "conversations";
+export type AutomationSort = "recent" | "name";

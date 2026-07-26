@@ -13,7 +13,6 @@ export type AutomationListFilters = {
 const comparators: Record<AutomationSort, (a: Automation, b: Automation) => number> = {
   recent: (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
   name: (a, b) => a.name.localeCompare(b.name, "pt-BR"),
-  conversations: (a, b) => b.conversations - a.conversations,
 };
 
 /** Busca sem acento e sem caixa — "satisfacao" acha "Pesquisa de satisfação". */

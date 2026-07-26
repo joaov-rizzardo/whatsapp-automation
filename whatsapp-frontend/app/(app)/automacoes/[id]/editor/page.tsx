@@ -1,14 +1,18 @@
-import { FlowEditor } from "@/features/flows/components/FlowEditor";
+import { FlowEditorPage } from "@/features/flows/components/FlowEditorPage";
 
 /**
- * Editor de fluxos de uma automação. A rota já carrega o id na URL, mas o editor
- * ainda é client-side puro e sem persistência: nada é carregado nem salvo por id
- * até a spec de persistência entrar.
+ * Editor de fluxos de uma automação. O id da URL é o id real da automação (um
+ * cuid), e agora é ele que carrega e salva o fluxo — em Next 16 `params` é
+ * assíncrono, daí o await.
  */
-export default function AutomationEditorPage() {
+export default async function AutomationEditorPage({
+  params,
+}: PageProps<"/automacoes/[id]/editor">) {
+  const { id } = await params;
+
   return (
     <div className="h-full w-full">
-      <FlowEditor />
+      <FlowEditorPage automationId={id} />
     </div>
   );
 }

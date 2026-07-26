@@ -31,7 +31,7 @@ export function AutomationFormDialog({
   mode: "create" | "rename";
   defaultName: string;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string) => void;
+  onSubmit: (name: string) => void | Promise<void>;
 }) {
   const { register, errors, isSubmitting, handleSubmit } = useAutomationForm({
     defaultName,

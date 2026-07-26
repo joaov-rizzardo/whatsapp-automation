@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { canActivate, describeTrigger } from "@/lib/describeTrigger";
 
 import { automationStatusMeta } from "../lib/automationStatus";
-import { formatCount, formatPercent } from "../lib/formatNumber";
 import { formatRelativeTime } from "../lib/formatRelativeTime";
 import type { Automation } from "../types/automation";
 import { AutomationRowActions } from "./AutomationRowActions";
@@ -18,8 +17,9 @@ import { AutomationRowActions } from "./AutomationRowActions";
  * forma que clicar em qualquer lugar abre o editor — menos no switch e no menu,
  * que ficam acima do overlay.
  *
- * As datas relativas trazem `suppressHydrationWarning` porque os dados mockados
- * nascem de `Date.now()` no servidor e de novo no cliente; sai junto com o mock.
+ * O selo de alterações não publicadas só aparece com a automação ativa: é aí
+ * que "o que está no ar não é o que você está vendo" muda alguma coisa para
+ * quem lê a lista.
  */
 export function AutomationListItem({
   automation,
@@ -37,7 +37,7 @@ export function AutomationListItem({
   const status = automationStatusMeta[automation.status];
   const missingTrigger = !canActivate(automation.trigger);
   const updatedAt = formatRelativeTime(automation.updatedAt);
-  const hasMetrics = automation.completionRate !== null;
+  const unpublished = automation.hasUnpublishedChanges && automation.status === "active";
 
   return (
     <li className="relative flex flex-col gap-3 px-4 py-4 transition-colors duration-fast ease-standard hover:bg-muted/40 sm:px-6 lg:flex-row lg:items-center lg:gap-6">
@@ -57,6 +57,11 @@ export function AutomationListItem({
             <Badge variant={status.badge} dot>
               {status.label}
             </Badge>
+            {unpublished && (
+              <Badge variant="outline" className="relative z-10 font-normal">
+                Alterações não publicadas
+              </Badge>
+            )}
           </div>
 
           <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
@@ -81,34 +86,13 @@ export function AutomationListItem({
             </span>
           </p>
 
-          {/* No mobile as métricas viram uma linha só, no rodapé do cartão. */}
-          <p className="text-xs text-muted-foreground md:hidden" suppressHydrationWarning>
-            {hasMetrics && `${formatCount(automation.conversations)} conversas · `}
-            editada {updatedAt}
-          </p>
+          {/* No mobile a data vira uma linha só, no rodapé do cartão. */}
+          <p className="text-xs text-muted-foreground md:hidden">editada {updatedAt}</p>
         </div>
       </div>
 
       <div className="flex items-center justify-end gap-4 pl-12 lg:gap-6 lg:pl-0">
-        <div className="hidden w-40 shrink-0 flex-col items-end lg:flex">
-          {hasMetrics ? (
-            <>
-              <span className="text-sm font-semibold tabular-nums">
-                {formatCount(automation.conversations)} conversas
-              </span>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {formatPercent(automation.completionRate ?? 0)} concluíram
-              </span>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">Ainda sem execuções</span>
-          )}
-        </div>
-
-        <span
-          className="hidden shrink-0 text-sm text-muted-foreground md:inline lg:w-28 lg:text-right"
-          suppressHydrationWarning
-        >
+        <span className="hidden shrink-0 text-sm text-muted-foreground md:inline lg:w-28 lg:text-right">
           {updatedAt}
         </span>
 

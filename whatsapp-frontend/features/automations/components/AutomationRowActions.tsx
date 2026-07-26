@@ -45,13 +45,19 @@ export function AutomationRowActions({
   onDelete: () => void;
 }) {
   const isActive = automation.status === "active";
-  const activatable = canActivate(automation.trigger);
+  const missingTrigger = !canActivate(automation.trigger);
+  // Nunca publicada é rascunho — e o que não tem versão no ar não tem o que
+  // atender. As duas razões são distintas, e o tooltip diz qual é.
+  const unpublished = automation.status === "draft";
+  const activatable = !missingTrigger && !unpublished;
 
-  const switchHint = !activatable
+  const switchHint = missingTrigger
     ? "Defina um gatilho para ativar"
-    : isActive
-      ? "Pausar automação"
-      : "Ativar automação";
+    : unpublished
+      ? "Publique o fluxo para ativar"
+      : isActive
+        ? "Pausar automação"
+        : "Ativar automação";
 
   return (
     <div className="relative z-10 flex items-center gap-1">
@@ -82,7 +88,7 @@ export function AutomationRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          {!activatable && (
+          {missingTrigger && (
             <DropdownMenuItem asChild>
               <Link href={`/automacoes/${automation.id}/editor`}>
                 <Zap />

@@ -4,8 +4,8 @@ export type AutomationsSummaryData = {
   active: number;
   paused: number;
   draft: number;
-  /** Soma das conversas iniciadas nos últimos 7 dias. */
-  conversations: number;
+  /** O total, que substituiu as conversas: métrica de verdade depende do motor. */
+  total: number;
 };
 
 export function summarizeAutomations(automations: Automation[]): AutomationsSummaryData {
@@ -16,6 +16,6 @@ export function summarizeAutomations(automations: Automation[]): AutomationsSumm
     active: byStatus("active"),
     paused: byStatus("paused"),
     draft: byStatus("draft"),
-    conversations: automations.reduce((total, item) => total + item.conversations, 0),
+    total: automations.length,
   };
 }

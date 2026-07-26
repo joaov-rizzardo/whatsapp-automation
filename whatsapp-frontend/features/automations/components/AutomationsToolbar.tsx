@@ -19,7 +19,6 @@ import type { AutomationSort, AutomationStatusFilter } from "../types/automation
 const sortOptions: { value: AutomationSort; label: string }[] = [
   { value: "recent", label: "Editadas recentemente" },
   { value: "name", label: "Nome (A–Z)" },
-  { value: "conversations", label: "Mais conversas" },
 ];
 
 /**
