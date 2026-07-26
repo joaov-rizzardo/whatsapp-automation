@@ -246,7 +246,7 @@ The short version:
 
 ## Flow editor — the block registry (`features/flows/`)
 
-The chatbot flow editor (specs 004 and 005) is **frontend-only**: reachable only by typing `/fluxos/editor` (no menu link), no persistence — state lives in React Flow's memory and resets on refresh. It uses **`@xyflow/react`** (React Flow v12; the old `reactflow` package is discontinued), which entered the project here. Its CSS is imported **once**, in `FlowEditor.tsx` (`import "@xyflow/react/dist/style.css"`), never in `globals.css`.
+The chatbot flow editor (specs 004 and 005) is **frontend-only**: it lives at `/automacoes/[id]/editor` (reached from the automations list), with no persistence — the id is in the URL, but nothing is loaded or saved by it, and state lives in React Flow's memory and resets on refresh. It uses **`@xyflow/react`** (React Flow v12; the old `reactflow` package is discontinued), which entered the project here. Its CSS is imported **once**, in `FlowEditor.tsx` (`import "@xyflow/react/dist/style.css"`), never in `globals.css`.
 
 Unlike `features/whatsapp/`, this feature has **no `api/`** — it's pure UI + local state (`blocks/ → lib/ → hooks/ → components/`). It does have `schemas/` and `types/`, but for the variable form and local shapes, not for the network.
 
@@ -263,11 +263,23 @@ Non-negotiables that keep this extensible:
 - **Nodes render their header buttons via `<BlockActions>`**: it derives the gear from `definition.modal` and the bin from `definition.singleton`, so a new block type gets both affordances without touching it.
 - Three optional definition hooks keep variable handling generic: **`usedVariables`** (feeds the panel's usage count and the delete confirmation), **`renameVariable`** (only for blocks that reference by *name* — in practice the `{{nome}}` in a message body; everything else stores ids, which renaming can't break), and **`validate`** (a pt-BR message that surfaces as the node's warning badge).
 - **`defineBlock` erases the per-block `Data` type for storage** in the heterogeneous registry — the standard existential-type move. The one place an untyped node `data` meets a typed modal is `NodeConfigModal` (the modal host); that boundary cast is intentional and contained. Don't reach for `any`.
-- **The anchor (`start`) is `singleton: true` + `addable: false`.** `createNode` sets `deletable: false` from `singleton`, so React Flow itself blocks deletion — no custom `onNodesChange` filtering. Deleting goes through React Flow throughout: `deleteKeyCode` is `["Delete", "Backspace"]` on the canvas, and the bin button calls `deleteElements` (which also drops the node's edges). Never filter `nodes`/`edges` by hand to remove something.
+- **The anchor (`start`) is `singleton: true` + `addable: false`, and it owns the flow's trigger.** Its data is `{ trigger }` (`types/automationTrigger.ts`), set in `StartModal`; `validate` turns a missing trigger into the node's warning, and the gear appears only because the definition now has a `modal` — that derivation is the whole point, so don't hardcode it. The anchor is also the one node outside `BlockShell`, so it composes `BlockActions` itself and passes a `className` for tone (ghost buttons would vanish on the brand card). `createNode` sets `deletable: false` from `singleton`, so React Flow itself blocks deletion — no custom `onNodesChange` filtering. Deleting goes through React Flow throughout: `deleteKeyCode` is `["Delete", "Backspace"]` on the canvas, and the bin button calls `deleteElements` (which also drops the node's edges). Never filter `nodes`/`edges` by hand to remove something.
 - **Connections are one custom edge type, `FlowEdge`.** Its selected highlight is painted inline (thicker path, darker brand tone, halo) because React Flow's `.selected` rules live in an unlayered stylesheet that Tailwind utilities can't override. Selecting an edge and pressing Delete/Backspace is the only way to remove one.
 - Nodes reach editor actions (opening their modal) through `FlowActionsContext`, since React Flow only hands a node its `NodeProps`.
 
 **Variables** are declared in the sidebar's *Variáveis* tab and nowhere else — the panel is the single source of truth, so a block can only point at something that exists. `useFlowVariables` owns them; `FlowVariablesContext` carries the list and the inline "create one" shortcut into block modals, because the modal host is generic and must not know variables exist. Blocks store a variable's **id**, never its name, so renaming can't break a select. System variables (`lib/systemVariables.ts`) are read-only: comparable, never writable.
+
+## Automações — a lista (`features/automations/`)
+
+`/automacoes` is **layout only**: no `api/`, no React Query, no persistence. `useAutomationsList` owns the collection in `useState` over `lib/mockAutomations.ts` and exposes filter/search/sort plus the row actions; every component below it is presentational. When persistence lands, that hook becomes `useQuery` + `useMutation` and **no component changes** — that's the point of the split, so don't push fetching down into the row.
+
+Two conventions the screen sets for the ones that follow:
+
+- **The row is a link, the controls sit on top.** The name's `after:absolute after:inset-0` covers the whole `<li>`; `AutomationRowActions` is `relative z-10` so the switch and the menu stay clickable. Don't wrap a row in a `<Link>` — it would swallow the interactive controls.
+- **Status and trigger have one home each.** `features/automations/lib/automationStatus.ts` maps status → label + Badge variant. The trigger is shared with the flow editor, so it sits at the root: `types/automationTrigger.ts` (the union) and `lib/describeTrigger.ts` (pt-BR line, `canActivate`, the options offered in the start block's modal). No screen re-invents "Ativa" and no feature re-describes a gatilho.
+- **The list shows the trigger, the start block defines it.** A row without one shows "Definir gatilho" linking to the editor, and the switch stays disabled. With no persistence the two don't sync — setting the trigger in the editor won't change the list.
+
+Relative dates render with `suppressHydrationWarning`: the mock's `updatedAt` is built from `Date.now()` on the server and again on the client. That goes away with the mock.
 
 ## Tailwind v4
 
