@@ -246,23 +246,28 @@ The short version:
 
 ## Flow editor — the block registry (`features/flows/`)
 
-The chatbot flow editor (spec 004) is a **frontend-only prototype**: reachable only by typing `/fluxos/editor` (no menu link), no persistence — state lives in React Flow's memory and resets on refresh. It uses **`@xyflow/react`** (React Flow v12; the old `reactflow` package is discontinued), which entered the project here. Its CSS is imported **once**, in `FlowEditor.tsx` (`import "@xyflow/react/dist/style.css"`), never in `globals.css`.
+The chatbot flow editor (specs 004 and 005) is **frontend-only**: reachable only by typing `/fluxos/editor` (no menu link), no persistence — state lives in React Flow's memory and resets on refresh. It uses **`@xyflow/react`** (React Flow v12; the old `reactflow` package is discontinued), which entered the project here. Its CSS is imported **once**, in `FlowEditor.tsx` (`import "@xyflow/react/dist/style.css"`), never in `globals.css`.
 
-Unlike `features/whatsapp/`, this feature has **no `api/` or `schemas/`** — it's pure UI + local state (`blocks/ → lib/ → hooks/ → components/`).
+Unlike `features/whatsapp/`, this feature has **no `api/`** — it's pure UI + local state (`blocks/ → lib/ → hooks/ → components/`). It does have `schemas/` and `types/`, but for the variable form and local shapes, not for the network.
 
-**Every block type is a `BlockDefinition` (`blocks/types.ts`) — data, not code branches.** A definition declares its handles, colour token, icon, default data, node component, and optional config modal. The registry (`blocks/registry.ts`) derives everything else from it: React Flow's `nodeTypes`, the palette's addable items, and node/modal lookup are all `Object.values(blockRegistry)`. **Adding a block is a new definition, never an editor refactor:**
+**Every block type is a `BlockDefinition` (`blocks/types.ts`) — data, not code branches.** A definition declares its handles, category, icon, default data, node component, optional config modal, and the optional hooks below. The registry (`blocks/registry.ts`) derives everything else from it: React Flow's `nodeTypes`, the palette's grouped items, and node/modal lookup. **Adding a block is a new definition, never an editor refactor:**
 
 1. Create `blocks/<name>/definition.ts` (via `defineBlock<YourData>({...})`), its `<Name>Node.tsx`, and — if it configures anything — its `<Name>Modal.tsx`.
-2. Register it in `blocks/registry.ts`. The canvas, palette and modal host don't change.
+2. Register it in `blocks/registry.ts`. The canvas, sidebar and modal host don't change.
 
 Non-negotiables that keep this extensible:
 
-- **Nodes render handles by mapping `definition.handles`** (via `<BlockHandles>`), never a hardcoded `<Handle>`. This is what makes "N outputs" (a future "randomizar" block) just another definition.
-- **Nodes render their header buttons via `<BlockActions>`**, same idea: it derives the gear from `definition.modal` and the bin from `definition.singleton`, so a new block type gets both affordances without touching it.
+- **`handles` can be a function of the data**, and every consumer reads it through `lib/resolveHandles.ts` — never `definition.handles` directly. That's what makes the randomizer's N user-configured outputs just another definition. **Two consequences live once, generically, in `useFlowEditor.updateNodeData`**: edges whose handle no longer exists are deleted (via `deleteElements`), and `updateNodeInternals(nodeId)` runs in an effect afterwards. Skip the second and React Flow draws edges against stale handle positions — the classic dynamic-handle bug.
+- **Nodes compose `<BlockShell>`**, which owns the card, selection ring, header, warning badge and handles. A block component is just its preview body.
+- **Colour comes from `category`, never a loose token.** `blocks/categories.ts` maps the five categories to full Tailwind class strings (see the design-system tokens doc for why they must never be interpolated), and the palette's grouping is derived from the same place.
+- **Nodes render their header buttons via `<BlockActions>`**: it derives the gear from `definition.modal` and the bin from `definition.singleton`, so a new block type gets both affordances without touching it.
+- Three optional definition hooks keep variable handling generic: **`usedVariables`** (feeds the panel's usage count and the delete confirmation), **`renameVariable`** (only for blocks that reference by *name* — in practice the `{{nome}}` in a message body; everything else stores ids, which renaming can't break), and **`validate`** (a pt-BR message that surfaces as the node's warning badge).
 - **`defineBlock` erases the per-block `Data` type for storage** in the heterogeneous registry — the standard existential-type move. The one place an untyped node `data` meets a typed modal is `NodeConfigModal` (the modal host); that boundary cast is intentional and contained. Don't reach for `any`.
 - **The anchor (`start`) is `singleton: true` + `addable: false`.** `createNode` sets `deletable: false` from `singleton`, so React Flow itself blocks deletion — no custom `onNodesChange` filtering. Deleting goes through React Flow throughout: `deleteKeyCode` is `["Delete", "Backspace"]` on the canvas, and the bin button calls `deleteElements` (which also drops the node's edges). Never filter `nodes`/`edges` by hand to remove something.
 - **Connections are one custom edge type, `FlowEdge`.** Its selected highlight is painted inline (thicker path, darker brand tone, halo) because React Flow's `.selected` rules live in an unlayered stylesheet that Tailwind utilities can't override. Selecting an edge and pressing Delete/Backspace is the only way to remove one.
 - Nodes reach editor actions (opening their modal) through `FlowActionsContext`, since React Flow only hands a node its `NodeProps`.
+
+**Variables** are declared in the sidebar's *Variáveis* tab and nowhere else — the panel is the single source of truth, so a block can only point at something that exists. `useFlowVariables` owns them; `FlowVariablesContext` carries the list and the inline "create one" shortcut into block modals, because the modal host is generic and must not know variables exist. Blocks store a variable's **id**, never its name, so renaming can't break a select. System variables (`lib/systemVariables.ts`) are read-only: comparable, never writable.
 
 ## Tailwind v4
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addEdge,
   useEdgesState,
   useNodesState,
   useReactFlow,
+  useUpdateNodeInternals,
   type Connection,
   type Edge,
   type Node,
@@ -15,21 +16,58 @@ import { toast } from "sonner";
 import { getDefinition } from "@/features/flows/blocks/registry";
 import { startDefinition } from "@/features/flows/blocks/start/definition";
 import { createNode } from "@/features/flows/lib/createNode";
+import { resolveHandles } from "@/features/flows/lib/resolveHandles";
+import { useFlowVariables } from "@/features/flows/hooks/useFlowVariables";
 
 // Only the anchor on the canvas at first. No persistence — refresh resets here.
 const initialNodes: Node[] = [createNode(startDefinition, { x: 0, y: 0 })];
 
 /**
  * Owns all editor state and interactions: nodes/edges, connecting, drag-and-drop
- * from the palette, per-node data updates and which node's config modal is open.
- * Must run inside a <ReactFlowProvider> — it uses `useReactFlow` for
- * `screenToFlowPosition`.
+ * from the palette, per-node data updates, the flow's variables and which node's
+ * config modal is open. Must run inside a <ReactFlowProvider> — it uses
+ * `useReactFlow` for `screenToFlowPosition`.
  */
 export function useFlowEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { screenToFlowPosition, deleteElements } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+
+  // React Flow caches each node's handle positions. When a block's outputs
+  // change shape (the randomizer gaining or losing a branch) it has to
+  // re-measure, or edges draw against stale handles. It must run *after* the
+  // new handles are in the DOM, hence an effect rather than a direct call —
+  // and a ref rather than state, so clearing the flag doesn't cost a render.
+  const nodeToRemeasure = useRef<string | null>(null);
+  useEffect(() => {
+    if (!nodeToRemeasure.current) return;
+    updateNodeInternals(nodeToRemeasure.current);
+    nodeToRemeasure.current = null;
+  }, [nodes, updateNodeInternals]);
+
+  // Renaming a variable can't break a select (blocks store ids), but a message
+  // body references it by name. Only blocks that declare `renameVariable` are
+  // touched — everything else is already correct.
+  const renameVariableInNodes = useCallback(
+    (from: string, to: string) => {
+      setNodes((current) =>
+        current.map((node) => {
+          const definition = getDefinition(node.type ?? "");
+          if (!definition?.renameVariable) return node;
+          return {
+            ...node,
+            data: definition.renameVariable(node.data, from, to),
+          };
+        }),
+      );
+    },
+    [setNodes],
+  );
+
+  const variableState = useFlowVariables({ onRename: renameVariableInNodes });
+  const { variables } = variableState;
 
   // Respects `sourceHandle`/`targetHandle`, so N-output blocks connect the
   // right handle out of the box.
@@ -79,16 +117,61 @@ export function useFlowEditor() {
     [deleteElements],
   );
 
+  /**
+   * Writes a block's config back into its node — and cleans up after handles
+   * that the new data removed. Both consequences of derived handles live here,
+   * once and generically: a block never has to know that its own branch was
+   * connected to something.
+   */
   const updateNodeData = useCallback(
     (nodeId: string, data: Record<string, unknown>) => {
+      const node = nodes.find((candidate) => candidate.id === nodeId);
+      const definition = node ? getDefinition(node.type ?? "") : undefined;
+      if (!node || !definition) return;
+
       setNodes((current) =>
-        current.map((node) =>
-          node.id === nodeId ? { ...node, data } : node,
+        current.map((candidate) =>
+          candidate.id === nodeId ? { ...candidate, data } : candidate,
         ),
       );
+
+      const handles = resolveHandles(definition, data);
+      const outputs = new Set(handles.outputs.map((handle) => handle.id));
+      const inputs = new Set(handles.inputs.map((handle) => handle.id));
+
+      const orphans = edges.filter(
+        (edge) =>
+          (edge.source === nodeId &&
+            edge.sourceHandle &&
+            !outputs.has(edge.sourceHandle)) ||
+          (edge.target === nodeId &&
+            edge.targetHandle &&
+            !inputs.has(edge.targetHandle)),
+      );
+
+      if (orphans.length > 0) {
+        void deleteElements({ edges: orphans.map((edge) => ({ id: edge.id })) });
+      }
+
+      nodeToRemeasure.current = nodeId;
     },
-    [setNodes],
+    [nodes, edges, setNodes, deleteElements],
   );
+
+  /** How many blocks reference each variable, by id. Drives the panel's usage
+   *  label and the "this is used somewhere" delete confirmation. */
+  const variableUsage = useMemo(() => {
+    const usage = new Map<string, number>();
+    for (const node of nodes) {
+      const definition = getDefinition(node.type ?? "");
+      if (!definition?.usedVariables) continue;
+      // A block referencing the same variable twice still counts as one block.
+      for (const id of new Set(definition.usedVariables(node.data, variables))) {
+        usage.set(id, (usage.get(id) ?? 0) + 1);
+      }
+    }
+    return usage;
+  }, [nodes, variables]);
 
   // Prototype "save": there's no backend yet, so we log the current flow as the
   // JSON shape a future persistence endpoint would receive, and confirm to the
@@ -96,6 +179,7 @@ export function useFlowEditor() {
   // state (measured size, selection, dragging).
   const saveFlow = useCallback(() => {
     const snapshot = {
+      variables: variableState.customVariables,
       nodes: nodes.map(({ id, type, position, data }) => ({
         id,
         type,
@@ -112,9 +196,9 @@ export function useFlowEditor() {
     };
     console.log("[flow] snapshot", snapshot);
     toast.success("Fluxo salvo", {
-      description: `${snapshot.nodes.length} bloco(s) e ${snapshot.edges.length} conexão(ões) — veja o console.`,
+      description: `${snapshot.nodes.length} bloco(s), ${snapshot.edges.length} conexão(ões) e ${snapshot.variables.length} variável(is) — veja o console.`,
     });
-  }, [nodes, edges]);
+  }, [nodes, edges, variableState.customVariables]);
 
   const openConfig = useCallback((nodeId: string) => {
     setActiveNodeId(nodeId);
@@ -139,5 +223,7 @@ export function useFlowEditor() {
     activeNodeId,
     openConfig,
     closeConfig,
+    variableUsage,
+    ...variableState,
   };
 }

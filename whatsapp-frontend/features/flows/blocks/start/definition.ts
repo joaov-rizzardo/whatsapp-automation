@@ -9,8 +9,11 @@ export type StartData = Record<string, never>;
 export const startDefinition = defineBlock<StartData>({
   type: "start",
   label: "Início",
+  description: "Onde o fluxo começa",
   icon: Play,
-  accentToken: "text-primary",
+  // Declared for completeness: the anchor paints itself with the brand
+  // gradient and never appears in the palette, so this category is inert.
+  category: "message",
   handles: {
     inputs: [],
     outputs: [{ id: "out" }],

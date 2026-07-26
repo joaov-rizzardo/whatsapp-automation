@@ -1,48 +1,30 @@
 "use client";
 
 import type { NodeProps } from "@xyflow/react";
+import { Keyboard } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { BlockActions } from "@/features/flows/blocks/BlockActions";
-import { BlockHandles } from "@/features/flows/blocks/BlockHandles";
+import { BlockShell } from "@/features/flows/blocks/BlockShell";
 import { getDefinition } from "@/features/flows/blocks/registry";
+import type { ContentData } from "@/features/flows/blocks/content/ContentModal";
 
 /**
- * A content block: header (icon + "Conteúdo" + the gear/bin actions), a preview
- * of the message text, and input/output handles mapped from the definition. A
- * plain click only selects — the gear opens config, the bin removes the block
- * (Delete/Backspace does the same once it's selected).
+ * A content block: a preview of the message it sends, plus a badge with the
+ * typing time when there is one.
  */
 export function ContentNode({ id, type, data, selected }: NodeProps) {
   const definition = getDefinition(type ?? "");
   if (!definition) return null;
 
-  const Icon = definition.icon;
-  const text = typeof data.text === "string" ? data.text : "";
+  const { text, typingSeconds } = data as unknown as ContentData;
 
   return (
-    <div
-      className={cn(
-        "flex w-56 flex-col gap-2 rounded-xl border border-border bg-card p-3 shadow-sm transition-all duration-base ease-standard hover:-translate-y-0.5 hover:shadow-md",
-        selected && "border-primary/40 ring-2 ring-ring ring-offset-2 ring-offset-background",
-      )}
+    <BlockShell
+      nodeId={id}
+      definition={definition}
+      data={data}
+      selected={selected}
     >
-      <div className="flex items-center gap-2">
-        <span className="flex size-7 items-center justify-center rounded-md bg-brand-subtle text-primary">
-          <Icon className="size-4" />
-        </span>
-        <span className="flex-1 font-heading text-sm font-medium text-foreground">
-          {definition.label}
-        </span>
-        <div className="-mr-1">
-          <BlockActions
-            nodeId={id}
-            configurable={Boolean(definition.modal)}
-            deletable={!definition.singleton}
-          />
-        </div>
-      </div>
-
       <p
         className={cn(
           "line-clamp-3 rounded-md bg-muted px-2.5 py-2 text-sm",
@@ -52,10 +34,12 @@ export function ContentNode({ id, type, data, selected }: NodeProps) {
         {text || "Sem mensagem"}
       </p>
 
-      <BlockHandles
-        inputs={definition.handles.inputs}
-        outputs={definition.handles.outputs}
-      />
-    </div>
+      {typingSeconds > 0 ? (
+        <p className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+          <Keyboard className="size-3.5" />
+          digitando por {typingSeconds}s
+        </p>
+      ) : null}
+    </BlockShell>
   );
 }

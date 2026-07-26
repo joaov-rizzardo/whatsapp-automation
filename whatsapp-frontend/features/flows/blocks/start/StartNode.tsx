@@ -3,8 +3,13 @@
 import type { NodeProps } from "@xyflow/react";
 
 import { cn } from "@/lib/utils";
-import { BlockHandles } from "@/features/flows/blocks/BlockHandles";
+import {
+  BlockInputHandles,
+  BlockOutputHandles,
+} from "@/features/flows/blocks/BlockHandles";
+import { getCategory } from "@/features/flows/blocks/categories";
 import { getDefinition } from "@/features/flows/blocks/registry";
+import { resolveHandles } from "@/features/flows/lib/resolveHandles";
 
 /**
  * The anchor where the flow begins. Unlike the white content blocks, it's a
@@ -13,11 +18,12 @@ import { getDefinition } from "@/features/flows/blocks/registry";
  * from the definition, no input. It's a singleton and not deletable (see
  * createNode). Handles come from `definition.handles`, never hardcoded.
  */
-export function StartNode({ type, selected }: NodeProps) {
+export function StartNode({ type, data, selected }: NodeProps) {
   const definition = getDefinition(type ?? "");
   if (!definition) return null;
 
   const Icon = definition.icon;
+  const handles = resolveHandles(definition, data);
 
   return (
     <div
@@ -45,9 +51,10 @@ export function StartNode({ type, selected }: NodeProps) {
         </span>
       </div>
 
-      <BlockHandles
-        inputs={definition.handles.inputs}
-        outputs={definition.handles.outputs}
+      <BlockInputHandles inputs={handles.inputs} />
+      <BlockOutputHandles
+        outputs={handles.outputs}
+        accentClass={getCategory(definition.category).accentClass}
       />
     </div>
   );

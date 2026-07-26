@@ -41,6 +41,18 @@ Utilities: `bg-brand`, `bg-brand-subtle`, `border-brand-subtle-border`…
 Cada um tem o par cor + fundo: `--success` / `--success-bg`, e igual para `--warning`, `--danger`, `--info`.
 Utilities: `text-success`, `bg-success-bg`, `text-danger`, `bg-warning-bg`…
 
+### Blocos do editor de fluxos — a exceção categórica
+
+`--block-message`, `--block-input`, `--block-logic`, `--block-data`, `--block-time`, cada um com o par `-bg`.
+Utilities: `text-block-logic`, `bg-block-data-bg`…
+
+**Isto é a única exceção à regra "um acento só por tela"**, e é consciente. O canvas do editor de fluxos é uma superfície *categórica*, como um gráfico: a cor não é ênfase, é identidade — ela diz de que tipo é o bloco. Fora do canvas a regra vale integralmente.
+
+Duas coisas para não errar ao mexer aqui:
+
+- É uma **família própria**, não aliases dos semânticos. `--block-logic` é âmbar como o `--warning`, mas não aponta para ele: mudar o significado de "aviso" no produto não pode repintar a categoria "Lógica".
+- As classes vivem escritas por extenso em `features/flows/blocks/categories.ts`, nunca interpoladas (`` `text-block-${key}` ``). O Tailwind varre o código por texto — classe montada em runtime não é gerada, e falha **em silêncio**.
+
 ### Superfícies
 
 | Token | Aponta para | Uso |

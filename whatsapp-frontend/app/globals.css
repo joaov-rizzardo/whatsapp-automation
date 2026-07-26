@@ -46,6 +46,28 @@
   --info: oklch(0.6 0.15 230);
   --info-bg: oklch(0.95 0.03 230);
 
+  /*
+   * Editor de fluxos — paleta categórica dos blocos.
+   *
+   * Exceção consciente à regra "um acento só por tela": o canvas é uma
+   * superfície *categórica*, como um gráfico — a cor identifica o tipo do
+   * bloco. Fora do canvas a regra continua valendo.
+   *
+   * Família própria de propósito, e não aliases dos semânticos: mexer no
+   * --warning não pode repintar a categoria "Lógica". Mesma disciplina de
+   * luminosidade/chroma dos semânticos, hue distinto por categoria.
+   */
+  --block-message: var(--purple-500);
+  --block-message-bg: var(--purple-50);
+  --block-input: oklch(0.6 0.15 230);
+  --block-input-bg: oklch(0.95 0.03 230);
+  --block-logic: oklch(0.68 0.14 70);
+  --block-logic-bg: oklch(0.95 0.04 70);
+  --block-data: oklch(0.6 0.15 145);
+  --block-data-bg: oklch(0.95 0.04 145);
+  --block-time: oklch(0.62 0.11 195);
+  --block-time-bg: oklch(0.95 0.03 195);
+
   /* Aliases de marca */
   --brand: var(--purple-500);
   --brand-hover: var(--purple-600);
@@ -242,6 +264,18 @@
   --color-danger-bg: var(--danger-bg);
   --color-info: var(--info);
   --color-info-bg: var(--info-bg);
+
+  /* Categorias de bloco do editor de fluxos: text-block-logic, bg-block-data-bg… */
+  --color-block-message: var(--block-message);
+  --color-block-message-bg: var(--block-message-bg);
+  --color-block-input: var(--block-input);
+  --color-block-input-bg: var(--block-input-bg);
+  --color-block-logic: var(--block-logic);
+  --color-block-logic-bg: var(--block-logic-bg);
+  --color-block-data: var(--block-data);
+  --color-block-data-bg: var(--block-data-bg);
+  --color-block-time: var(--block-time);
+  --color-block-time-bg: var(--block-time-bg);
 
   /* Manrope para display/títulos/números, Inter para corpo e UI */
   --font-sans: var(--font-body);
