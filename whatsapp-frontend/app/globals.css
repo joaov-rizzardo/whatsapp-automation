@@ -361,3 +361,20 @@
     text-decoration: underline;
   }
 }
+
+/*
+ * Toast (sonner) — a descrição, nos nossos tokens.
+ *
+ * O sonner cravou `color: #3f3f3f` na descrição, e o título é o único texto que
+ * o `--normal-text` do componente alcança. Sem esta regra a descrição fica num
+ * cinza que não é do design system e não acompanha nenhum token.
+ *
+ * Fora de `@layer` e com especificidade (0,4,0) de propósito: a folha do sonner
+ * não é layered, então utilitário do Tailwind não a vence (a mesma armadilha que
+ * o `.selected` do React Flow — ver CLAUDE.md) e a regra dela é (0,3,0). Casar a
+ * classe `.cn-toast`, que o `components/ui/sonner.tsx` já aplica, é o que fecha
+ * a conta sem depender da ordem de importação do CSS.
+ */
+[data-sonner-toast].cn-toast[data-styled="true"] [data-description] {
+  color: var(--muted-foreground);
+}
