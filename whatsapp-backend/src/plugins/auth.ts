@@ -21,7 +21,7 @@ async function authPlugin(app: FastifyInstance): Promise<void> {
   await app.register(cors, {
     origin: env.CLIENT_ORIGIN,
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   });
 
