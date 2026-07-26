@@ -69,14 +69,22 @@ The rule that protects every feature still to come: **`organizationId` comes fro
 
 Both sides must be running for anything crossing the boundary, and PostgreSQL, Evolution and RabbitMQ must be up (`docker compose up -d` at the root).
 
-**The chatbot flow editor (specs 004 and 005) exists frontend-only.** No backend, no persistence — it doesn't touch the API or the database. It lives at `/automacoes/[id]/editor`, reached from the automations list; the id is in the URL but nothing is loaded or saved by it, and state lives in React Flow's memory and resets on refresh. It's built on **`@xyflow/react`** (React Flow v12, new to the project) around an **extensible block registry** (`features/flows/blocks/`): a block type is a data-only definition, and adding one doesn't touch the editor.
+**The chatbot flow editor (specs 004, 005 and 006) is persisted end to end.** It lives at `/automacoes/[id]/editor`, reached from the automations list, and the id in the URL is the automation's real id (a cuid) — it loads and saves by it. It's built on **`@xyflow/react`** (React Flow v12, new to the project) around an **extensible block registry** (`features/flows/blocks/`): a block type is a data-only definition, and adding one doesn't touch the editor.
 
 Six block types today — start anchor (which now carries the flow's **trigger**: keyword, any message or first contact, configured in its own modal), conteúdo (text, with emoji, `{{variáveis}}` and typing time), aguardar resposta (timeout + reply outputs), se (E/OU conditions), definir variável, aguardar (delay) and randomizar (N outputs by percentage). The randomizer's outputs come from its *data*, which is what proves the registry. The editor also has **flow variables** — typed, declared in the sidebar's Variáveis tab, plus read-only system ones (hora, dia_semana, nome_contato…). Blocks are coloured and grouped by category, with a `--block-*` token family that is the design system's one deliberate exception to "one accent per screen". See `whatsapp-frontend/CLAUDE.md`.
 
-**The automations screen (`/automacoes`) is layout only.** It's the home of the automation as a product entity — list, activate/pause, create, rename, duplicate, delete — and the entry point to the editor. No API and no persistence either: `features/automations/` keeps the collection in local state over `lib/mockAutomations.ts`, which is the only file that disappears when the API lands.
+**The automations screen (`/automacoes`) is the same feature's other half**: list, activate/pause, create, rename, duplicate, delete, and the entry point to the editor. It runs on React Query over the API; the mock is gone.
 
-The **trigger** is the one concept the two screens share: `types/automationTrigger.ts` + `lib/describeTrigger.ts` are at the root precisely because the list displays it and the editor's start block defines it. Until persistence exists they don't talk — a trigger set in the editor does not show up in the list, and the list's "Definir gatilho" only links there.
+**Persistence (spec 006) is what ties the two together.** Three tables — `automation`, `flow_draft`, `flow_version` — and one module, `modules/automations/`. The shape that matters:
 
-Next: **persistence** (schema + API + backend, including the variables and the trigger), and richer block types (media, buttons, lists).
+- **The flow is one JSON document** (`{ schemaVersion, nodes, edges, variables, viewport }`), not relational rows: the editor always loads and saves the whole graph, and its integrity is enforced on write by the service.
+- **Draft versus published.** The autosave writes to the draft; `Publicar` freezes an immutable `flow_version`. Editing a live automation therefore never changes what is running, half a block at a time.
+- **Saving validates the shape, publishing validates the meaning.** An incomplete draft (empty message, no trigger) saves fine; it just can't be published.
+- **A block type is one file per side.** The backend grew a **block registry** (`modules/automations/blocks/`) mirroring the frontend's — `dataSchema` + `handles` + `validate` today, `execute` when the engine lands. No new block ever needs a migration.
+- **Two tabs can't overwrite each other**: `flow_draft.version` is an optimistic lock, and a stale save gets a 409 the editor turns into "recarregar".
+
+The **trigger** is the concept the two screens share (`types/automationTrigger.ts` + `lib/describeTrigger.ts`, at the root for that reason) — and now they sync: the backend derives it from the start block on every save, into a column the list reads.
+
+Next: **the execution engine** — consume `MESSAGES_UPSERT` from RabbitMQ, match the message against the trigger of the organization's published versions, and walk the document with an `execute` per block in the backend registry. Then richer block types (media, buttons, lists).
 
 Beyond auth, the architecture in both CLAUDE.md files is still the **target**, not a description of what exists. Don't assume a file described there is already on disk.
