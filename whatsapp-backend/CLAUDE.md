@@ -154,11 +154,21 @@ WhatsApp connection is the first real feature vertical slice (spec 003):
 - `plugins/evolution.ts` (HTTP client) and `plugins/rabbitmq.ts` (managed AMQP connection, worker only); `worker.ts`, the second entrypoint; `lib/logger/` (the Logger provider) and `lib/evolution/`.
 - Migration `add_whatsapp_connection` (our own `whatsapp_connection` table — no FK to Better Auth's tables).
 
+Automations and flows are the second feature slice (spec 006) and the first one with a **block registry**:
+
+- `modules/automations/` — one module for one aggregate, with **two route files**: `automations.*` (CRUD of the automation) and `flow.*` (draft and publishing). The automation never exists without its draft; publishing inserts a version and moves the automation's pointers in one transaction, which is why splitting them in two modules was rejected.
+- **`modules/automations/blocks/` is the block registry — and the place the execution engine will live.** One file per block type (`start`, `content`, `wait-reply`, `condition`, `set-variable`, `delay`, `randomizer`), each declaring `dataSchema` (JSON Schema, compiled once with Ajv at boot), `handles(data)`, and an optional `validate`. Adding a block type is one file here plus one on the frontend — **no migration, no column, no `if` in the service**. An unknown type is refused on save (`400 UNKNOWN_BLOCK_TYPE`), so nothing reaches the database in a shape the engine couldn't read.
+- **Saving validates the *shape*; publishing validates the *meaning*.** The autosave fires while the user types, so `saveDraft` accepts an incomplete flow (empty message, no trigger, randomizer at 80%) and refuses only structural garbage. The per-block `validate` runs on `publish`, and its problems come back together as **422 `FLOW_INVALID` with `{ issues: [{ nodeId, message }] }`** — the one extra payload `error-handler` forwards.
+- `flow_draft.version` is an **optimistic lock**: the version is part of the `WHERE` of the update, so two tabs never overwrite each other — the second gets **409 `FLOW_VERSION_CONFLICT`**. `FlowVersion` is immutable: only `INSERT` and the cascade's `DELETE`.
+- Migration `add_automations_and_flows` (`automation`, `flow_draft`, `flow_version` — again with no FK to Better Auth's tables). `ajv` became a direct dependency here.
+
+**Rule this feature adds, for every nested resource that follows: look it up by `(id, organizationId)`, and answer 404 — never 403.** The repository deliberately exposes no `findById(id)`. A 403 would confirm that the resource exists, which is exactly what an id from another organization must not learn. `automations.test.ts`/`flow.test.ts` assert it on every `:id` route.
+
 `npm run dev` needs PostgreSQL up, and the WhatsApp feature also needs Evolution + RabbitMQ (`docker compose up -d` at the repo root) and a `.env` — copy `.env.example`. The generated Prisma client is gitignored, so a fresh clone runs `prisma generate` (wired to `postinstall`).
 
 `json-schema-to-ts` is installed and used by `whatsapp-connection.schema.ts` (`FromSchema`) — the first route with a typed body. Other routes may still declare plain JSON Schema.
 
-Modules beyond `me/`, `whatsapp-connection/` and `evolution-events/` are still the **target**, not what exists.
+Modules beyond `me/`, `whatsapp-connection/`, `evolution-events/` and `automations/` are still the **target**, not what exists.
 
 ## Better Auth and the layering rule
 

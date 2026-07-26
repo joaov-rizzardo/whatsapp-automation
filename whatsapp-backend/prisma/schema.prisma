@@ -139,3 +139,80 @@ model WhatsappConnection {
 
   @@map("whatsapp_connection")
 }
+
+/// Uma automação da organização (spec 006). Sem FK para `organization` — mesma
+/// regra da whatsapp_connection: `organizationId` só chega por
+/// request.organizationId, nunca do payload.
+model Automation {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+
+  /// Só significa algo com uma versão publicada; o status tri-estado (rascunho
+  /// | ativa | pausada) é derivado na service — nunca publicada = rascunho.
+  isActive Boolean @default(false)
+
+  /// Derivados do RASCUNHO a cada salvamento, para a lista não precisar
+  /// carregar documento nenhum. A fonte da verdade continua sendo o nó de
+  /// início do documento.
+  trigger    Json @default("{\"kind\":\"none\"}")
+  blockCount Int  @default(1)
+
+  /// Ponteiros da publicação. Colunas soltas, sem relação Prisma, de propósito:
+  /// uma FK automation -> flow_version fecharia um ciclo com o cascade da
+  /// relação inversa. O repository faz o join à mão, numa consulta só.
+  publishedVersionNumber Int?
+  /// Versão do rascunho de onde a publicação saiu — é o que responde "há
+  /// alterações não publicadas?" sem comparar documentos nem relógios.
+  publishedDraftVersion Int?
+  publishedAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  draft    FlowDraft?
+  versions FlowVersion[]
+
+  @@index([organizationId])
+  @@map("automation")
+}
+
+/// O que o editor edita. Um por automação, criado junto com ela — nenhuma
+/// automação existe sem rascunho, então `GET .../flow` nunca trata "não tem".
+model FlowDraft {
+  id           String     @id @default(cuid())
+  automationId String     @unique
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  /// O documento inteiro (§4.1 da spec): nodes, edges, variables, viewport.
+  /// Opaco para o banco, validado pelo registry de blocos na escrita.
+  document Json
+  /// Trava otimista: sobe 1 a cada salvamento aceito. Versão que não bate → 409.
+  version Int @default(1)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("flow_draft")
+}
+
+/// Uma publicação. Imutável — nunca sofre UPDATE, só INSERT e o DELETE do
+/// cascade. É o que o motor lê, e é o que deixa uma conversa em andamento
+/// continuar na versão em que começou.
+model FlowVersion {
+  id           String     @id @default(cuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  number   Int
+  document Json
+  /// Copiado do nó de início no ato da publicação: o motor casa a mensagem
+  /// recebida contra ISTO, nunca contra o gatilho do rascunho.
+  trigger Json
+  /// De qual versão do rascunho esta publicação saiu.
+  draftVersion Int
+
+  publishedAt DateTime @default(now())
+
+  @@unique([automationId, number])
+  @@map("flow_version")
+}

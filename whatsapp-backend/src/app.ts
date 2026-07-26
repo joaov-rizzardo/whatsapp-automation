@@ -7,6 +7,8 @@ import evolutionPlugin from "./plugins/evolution.js";
 import prismaPlugin from "./plugins/prisma.js";
 import requireAuthPlugin from "./plugins/require-auth.js";
 import requireOrganizationPlugin from "./plugins/require-organization.js";
+import { automationsRoutes } from "./modules/automations/automations.routes.js";
+import { flowRoutes } from "./modules/automations/flow.routes.js";
 import { meRoutes } from "./modules/me/me.routes.js";
 import { whatsappConnectionRoutes } from "./modules/whatsapp-connection/whatsapp-connection.routes.js";
 
@@ -30,6 +32,9 @@ export function buildApp(): FastifyInstance {
 
   app.register(meRoutes);
   app.register(whatsappConnectionRoutes);
+  // Um agregado, dois arquivos de rota (spec 006, decisão 6).
+  app.register(automationsRoutes);
+  app.register(flowRoutes);
 
   return app;
 }

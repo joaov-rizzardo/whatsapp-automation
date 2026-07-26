@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 
-import { AppError } from "../shared/errors.js";
+import { AppError, FlowInvalidError } from "../shared/errors.js";
 
 function statusCodeOf(error: unknown): number | undefined {
   if (typeof error === "object" && error !== null && "statusCode" in error) {
@@ -20,9 +20,14 @@ function isValidationError(error: unknown): boolean {
 async function errorHandlerPlugin(app: FastifyInstance): Promise<void> {
   app.setErrorHandler((error: unknown, request, reply) => {
     if (error instanceof AppError) {
+      // `issues` é a única informação extra que um erro de domínio carrega até
+      // o cliente (o 422 da publicação): a lista de problemas por nó, que o
+      // editor usa para dizer o que consertar.
+      const issues = error instanceof FlowInvalidError ? error.issues : undefined;
+
       return reply
         .status(error.statusCode)
-        .send({ code: error.code, message: error.message });
+        .send({ code: error.code, message: error.message, ...(issues && { issues }) });
     }
 
     if (isValidationError(error)) {

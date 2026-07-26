@@ -57,3 +57,66 @@ export class ValidationError extends AppError {
     super(message);
   }
 }
+
+/**
+ * 409 — tentaram ativar uma automação que nunca foi publicada. Ativar é "pode
+ * atender": sem versão no ar não há o que atender.
+ */
+export class NotPublishedError extends AppError {
+  readonly statusCode = 409;
+  readonly code = "NOT_PUBLISHED";
+
+  constructor(message = "Publique o fluxo antes de ativar a automação") {
+    super(message);
+  }
+}
+
+/**
+ * 400 — o documento traz um tipo de bloco que este backend não conhece. Código
+ * próprio porque diz uma coisa específica ao cliente: "atualize o app" (ou, em
+ * desenvolvimento, "faltou o arquivo do bloco deste lado").
+ */
+export class UnknownBlockTypeError extends AppError {
+  readonly statusCode = 400;
+  readonly code = "UNKNOWN_BLOCK_TYPE";
+
+  constructor(readonly blockType: string) {
+    super(`Tipo de bloco desconhecido: ${blockType}`);
+  }
+}
+
+/** Um problema atribuído a um nó do fluxo. Mora aqui porque é o que o
+ *  FlowInvalidError carrega até o cliente; o registry de blocos o reexporta. */
+export type ValidationIssue = { nodeId: string; message: string };
+
+/**
+ * 409 — o rascunho avançou desde que o cliente o carregou. Código próprio, e
+ * não o ConflictError genérico, porque o frontend trata este caso de um jeito
+ * específico: para o autosave e oferece recarregar.
+ */
+export class VersionConflictError extends AppError {
+  readonly statusCode = 409;
+  readonly code = "FLOW_VERSION_CONFLICT";
+
+  constructor(message = "Este fluxo foi alterado em outro lugar") {
+    super(message);
+  }
+}
+
+/**
+ * 422 — o fluxo está estruturalmente válido mas não pode entrar no ar. Carrega
+ * a lista de problemas por nó, que é a única informação extra que o
+ * error-handler repassa — e é segura, são mensagens sobre o que o próprio
+ * usuário montou.
+ */
+export class FlowInvalidError extends AppError {
+  readonly statusCode = 422;
+  readonly code = "FLOW_INVALID";
+
+  constructor(
+    readonly issues: ValidationIssue[],
+    message = "Corrija os problemas do fluxo antes de publicar",
+  ) {
+    super(message);
+  }
+}
