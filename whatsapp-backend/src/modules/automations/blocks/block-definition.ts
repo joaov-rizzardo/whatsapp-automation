@@ -2,6 +2,7 @@ import type { JSONSchema } from "json-schema-to-ts";
 
 import type { FlowVariableDocument } from "../flow.schema.js";
 import type { ValidationIssue } from "../../../shared/errors.js";
+import type { VariableType } from "./variable-types.js";
 
 /**
  * O contrato do registry de blocos do backend — o espelho do registry do
@@ -21,8 +22,13 @@ export type BlockValidationIssue = ValidationIssue;
  * Uma variável como as regras semânticas a enxergam: as do documento mais as do
  * sistema, que o backend é dono. `origin` é o que distingue "posso comparar" de
  * "posso gravar".
+ *
+ * O `type` é mais largo do que o do documento: só as de sistema podem ser de um
+ * tipo especial (hora, data, mês, dia da semana), e é justamente por isso que
+ * eles não aparecem no schema do documento.
  */
-export type FlowValidationVariable = FlowVariableDocument & {
+export type FlowValidationVariable = Omit<FlowVariableDocument, "type"> & {
+  type: VariableType;
   origin: "custom" | "system";
 };
 

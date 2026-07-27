@@ -28,6 +28,7 @@ import {
   emptyLiteral,
   type ComparisonValue,
 } from "@/features/flows/types/comparisonValue";
+import { isSpecialType } from "@/features/flows/types/variable";
 
 export type SetVariableOperation = "set" | "increment" | "decrement";
 
@@ -59,6 +60,11 @@ export function SetVariableModal({
   // isn't there for the other types — and a leftover "somar" from a previous
   // pick is reset when the target changes.
   const supportsArithmetic = target?.type === "number";
+
+  // O alvo sai de um seletor `writableOnly`, então nunca é do sistema — e só as
+  // do sistema têm tipo especial. O fallback é para o compilador, não para a UI.
+  const targetType =
+    target && !isSpecialType(target.type) ? target.type : "text";
 
   function save() {
     onChange({ variableId, operation, value });
@@ -123,7 +129,7 @@ export function SetVariableModal({
             <ComparisonValueField
               value={value}
               onChange={setValue}
-              type={supportsArithmetic ? "number" : target.type}
+              type={supportsArithmetic ? "number" : targetType}
             />
           </div>
         ) : null}

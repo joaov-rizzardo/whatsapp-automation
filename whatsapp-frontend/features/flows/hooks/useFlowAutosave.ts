@@ -18,7 +18,7 @@ import type {
   FlowViewport,
   SavedFlow,
 } from "@/features/flows/schemas/flowDocument";
-import type { FlowVariable } from "@/features/flows/types/variable";
+import type { CustomFlowVariable } from "@/features/flows/types/variable";
 import { ApiError } from "@/lib/http";
 
 /** 1,2 s parado desde a última alteração dispara o salvamento. */
@@ -77,7 +77,7 @@ export function useFlowAutosave({
   nodes: Node[];
   edges: Edge[];
   /** Só as personalizadas — as de sistema não entram no documento. */
-  variables: FlowVariable[];
+  variables: CustomFlowVariable[];
   getViewport: () => FlowViewport;
 }) {
   const queryClient = useQueryClient();

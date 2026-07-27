@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 import { systemVariableNames } from "@/features/flows/lib/systemVariables";
-import type { FlowVariable } from "@/features/flows/types/variable";
+import {
+  customVariableTypes,
+  type FlowVariable,
+} from "@/features/flows/types/variable";
 
 /**
  * The variable form. The name is a slug because it also has to survive being
@@ -38,7 +41,9 @@ export function buildVariableSchema(
           ),
         { message: "Já existe uma variável com este nome" },
       ),
-    type: z.enum(["text", "number", "boolean"]),
+    // Só os tipos personalizados: hora, data, mês e dia da semana existem
+    // apenas nas variáveis de sistema.
+    type: z.enum(customVariableTypes),
     initialValue: z.string(),
   })
   .superRefine((values, ctx) => {

@@ -44,6 +44,27 @@ export const comparisonValueSchema = {
         variableId: { type: ["string", "null"], maxLength: 120 },
       },
     },
+    // As duas formas que os tipos especiais trouxeram. Vêm vazias enquanto o
+    // usuário escolhe, e o formato de cada valor é cobrado na publicação.
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["kind", "from", "to"],
+      properties: {
+        kind: { const: "range" },
+        from: { type: "string", maxLength: 40 },
+        to: { type: "string", maxLength: 40 },
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["kind", "values"],
+      properties: {
+        kind: { const: "set" },
+        values: { type: "array", maxItems: 60, items: { type: "string", maxLength: 40 } },
+      },
+    },
   ],
 } as const;
 

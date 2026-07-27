@@ -2,12 +2,12 @@ import type { Edge, Node } from "@xyflow/react";
 
 import { getDefinition } from "@/features/flows/blocks/registry";
 import type { FlowDocument, FlowViewport } from "@/features/flows/schemas/flowDocument";
-import type { FlowVariable } from "@/features/flows/types/variable";
+import type { CustomFlowVariable } from "@/features/flows/types/variable";
 
 export type DeserializedFlow = {
   nodes: Node[];
   edges: Edge[];
-  variables: FlowVariable[];
+  variables: CustomFlowVariable[];
   /** `null` num fluxo que nunca foi enquadrado — o canvas então usa `fitView`. */
   viewport: FlowViewport | null;
   /** Quantos blocos o documento tinha e este app não sabe desenhar. */
@@ -61,7 +61,7 @@ export function deserializeFlow(document: FlowDocument): DeserializedFlow {
       animated: true,
     }));
 
-  const variables: FlowVariable[] = document.variables.map((variable) => ({
+  const variables: CustomFlowVariable[] = document.variables.map((variable) => ({
     ...variable,
     origin: "custom",
   }));

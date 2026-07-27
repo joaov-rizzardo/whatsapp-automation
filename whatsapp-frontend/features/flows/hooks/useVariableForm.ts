@@ -8,7 +8,11 @@ import {
   buildVariableSchema,
   type VariableFormInput,
 } from "@/features/flows/schemas/variable";
-import type { FlowVariable, VariableType } from "@/features/flows/types/variable";
+import type {
+  CustomFlowVariable,
+  CustomVariableType,
+  FlowVariable,
+} from "@/features/flows/types/variable";
 
 /**
  * The variable dialog's form. Uniqueness depends on the variables that already
@@ -26,7 +30,7 @@ export function useVariableForm({
   onSubmit,
 }: {
   open: boolean;
-  variable?: FlowVariable; // present = editing
+  variable?: CustomFlowVariable; // present = editing
   variables: FlowVariable[]; // the custom ones, for the uniqueness check
   onSubmit: (values: VariableFormInput) => void;
 }) {
@@ -61,7 +65,7 @@ export function useVariableForm({
 
   /** Switching type clears the initial value: `true` is meaningless for a text
    *  variable, and `abc` would only fail number validation on submit. */
-  function changeType(next: VariableType) {
+  function changeType(next: CustomVariableType) {
     typeField.onChange(next);
     initialValueField.onChange(next === "boolean" ? "false" : "");
   }

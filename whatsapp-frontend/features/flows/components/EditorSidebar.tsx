@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BlockPalette } from "@/features/flows/components/BlockPalette";
 import { VariablesPanel } from "@/features/flows/components/VariablesPanel";
 import type { NewVariableInput } from "@/features/flows/schemas/variable";
-import type { FlowVariable } from "@/features/flows/types/variable";
+import type { CustomFlowVariable } from "@/features/flows/types/variable";
 
 /**
  * The editor's left rail: the block palette and the variables panel, as tabs.
@@ -18,7 +18,7 @@ export function EditorSidebar({
   onUpdateVariable,
   onDeleteVariable,
 }: {
-  customVariables: FlowVariable[];
+  customVariables: CustomFlowVariable[];
   variableUsage: Map<string, number>;
   onCreateVariable: (input: NewVariableInput) => void;
   onUpdateVariable: (id: string, input: NewVariableInput) => void;

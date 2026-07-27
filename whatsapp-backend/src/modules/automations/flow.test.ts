@@ -188,6 +188,30 @@ function contentNode(id = "content-b2", text = "Olá!"): FlowNodeDocument {
   };
 }
 
+type ComparisonInput = {
+  variableId: string;
+  operator: string;
+  right: unknown;
+};
+
+function conditionNode(
+  comparisons: ComparisonInput[],
+  id = "condition-d4",
+): FlowNodeDocument {
+  return {
+    id,
+    type: "condition",
+    position: { x: 320, y: 200 },
+    data: {
+      logic: "and",
+      comparisons: comparisons.map((comparison, index) => ({
+        id: `cmp-${index}`,
+        ...comparison,
+      })),
+    },
+  };
+}
+
 function randomizerNode(id = "randomizer-c3"): FlowNodeDocument {
   return {
     id,
@@ -558,7 +582,7 @@ describe("FlowService.publish", () => {
       document({
         nodes: [
           startNode({ kind: "anyMessage" }),
-          contentNode("content-b2", "Olá {{nome_contato}}!"),
+          contentNode("content-b2", "Olá {{nome}}, hoje é {{dia_semana}}!"),
         ],
       }),
     );
@@ -631,6 +655,249 @@ describe("FlowService.publish", () => {
     await expect(service.publish(AUTOMATION_ID, OTHER_ORG)).rejects.toBeInstanceOf(
       NotFoundError,
     );
+  });
+});
+
+// --- Condições sobre variáveis de sistema ------------------------------------
+
+/**
+ * Os tipos especiais (hora, data, mês, dia da semana) só existem em variáveis
+ * do sistema, e são a razão de o lado direito de uma comparação ter forma
+ * variável: faixa para hora e data, conjunto para mês e dia da semana.
+ *
+ * A publicação é onde o formato do valor é cobrado — o rascunho salva uma faixa
+ * pela metade, porque é isso que o editor grava enquanto o usuário escolhe.
+ */
+describe("FlowService.publish, condições sobre variáveis do sistema", () => {
+  async function publishWith(comparisons: ComparisonInput[]) {
+    const { service } = createService();
+    await service.saveDraft(AUTOMATION_ID, ORG, {
+      version: 1,
+      document: document({
+        nodes: [startNode({ kind: "anyMessage" }), conditionNode(comparisons)],
+      }),
+    });
+    return service.publish(AUTOMATION_ID, ORG).catch((caught: unknown) => caught);
+  }
+
+  async function issuesOf(comparisons: ComparisonInput[]) {
+    const result = await publishWith(comparisons);
+    expect(result).toBeInstanceOf(FlowInvalidError);
+    return (result as FlowInvalidError).issues;
+  }
+
+  it("aceita uma faixa de horas", async () => {
+    await expect(
+      publishWith([
+        {
+          variableId: "sys:hora",
+          operator: "between",
+          right: { kind: "range", from: "08:00", to: "18:00" },
+        },
+      ]),
+    ).resolves.toMatchObject({ versionNumber: 1 });
+  });
+
+  it("aceita a faixa que atravessa a meia-noite", async () => {
+    await expect(
+      publishWith([
+        {
+          variableId: "sys:hora",
+          operator: "between",
+          right: { kind: "range", from: "22:00", to: "06:00" },
+        },
+      ]),
+    ).resolves.toMatchObject({ versionNumber: 1 });
+  });
+
+  it("aceita um conjunto de dias da semana", async () => {
+    await expect(
+      publishWith([
+        {
+          variableId: "sys:dia_semana",
+          operator: "in",
+          right: { kind: "set", values: ["1", "2", "3", "4", "5"] },
+        },
+      ]),
+    ).resolves.toMatchObject({ versionNumber: 1 });
+  });
+
+  it("aceita um operador sem lado direito", async () => {
+    await expect(
+      publishWith([
+        {
+          variableId: "sys:dia_semana",
+          operator: "is_weekend",
+          right: { kind: "literal", value: "" },
+        },
+      ]),
+    ).resolves.toMatchObject({ versionNumber: 1 });
+  });
+
+  it("aceita uma faixa de datas", async () => {
+    await expect(
+      publishWith([
+        {
+          variableId: "sys:data",
+          operator: "between",
+          right: { kind: "range", from: "2026-12-01", to: "2026-12-31" },
+        },
+      ]),
+    ).resolves.toMatchObject({ versionNumber: 1 });
+  });
+
+  it("recusa um operador que não vale para o tipo", async () => {
+    expect(
+      await issuesOf([
+        {
+          variableId: "sys:dia_semana",
+          operator: "gt",
+          right: { kind: "literal", value: "3" },
+        },
+      ]),
+    ).toEqual([
+      { nodeId: "condition-d4", message: "O operador não vale para dia_semana" },
+    ]);
+  });
+
+  it("recusa uma faixa pela metade", async () => {
+    expect(
+      await issuesOf([
+        {
+          variableId: "sys:hora",
+          operator: "between",
+          right: { kind: "range", from: "08:00", to: "" },
+        },
+      ]),
+    ).toEqual([
+      { nodeId: "condition-d4", message: "Uma condição está sem valor de comparação" },
+    ]);
+  });
+
+  it("recusa um conjunto vazio", async () => {
+    expect(
+      await issuesOf([
+        { variableId: "sys:mes", operator: "in", right: { kind: "set", values: [] } },
+      ]),
+    ).toEqual([
+      { nodeId: "condition-d4", message: "Uma condição está sem valor de comparação" },
+    ]);
+  });
+
+  it("recusa uma forma de valor que o operador não pede", async () => {
+    expect(
+      await issuesOf([
+        {
+          variableId: "sys:hora",
+          operator: "between",
+          right: { kind: "literal", value: "08:00" },
+        },
+      ]),
+    ).toEqual([
+      { nodeId: "condition-d4", message: "Uma condição está sem valor de comparação" },
+    ]);
+  });
+
+  it("recusa uma hora fora do formato", async () => {
+    expect(
+      await issuesOf([
+        {
+          variableId: "sys:hora",
+          operator: "after",
+          right: { kind: "literal", value: "25:99" },
+        },
+      ]),
+    ).toEqual([
+      { nodeId: "condition-d4", message: "Valor inválido para hora: 25:99" },
+    ]);
+  });
+
+  it("recusa um mês fora de 1..12", async () => {
+    expect(
+      await issuesOf([
+        {
+          variableId: "sys:mes",
+          operator: "in",
+          right: { kind: "set", values: ["1", "13"] },
+        },
+      ]),
+    ).toEqual([{ nodeId: "condition-d4", message: "Valor inválido para mes: 13" }]);
+  });
+
+  it("recusa comparar um tipo especial com outra variável", async () => {
+    expect(
+      await issuesOf([
+        {
+          variableId: "sys:hora",
+          operator: "after",
+          right: { kind: "variable", variableId: "sys:data" },
+        },
+      ]),
+    ).toEqual([
+      {
+        nodeId: "condition-d4",
+        message: "hora só pode ser comparada com um valor fixo",
+      },
+    ]);
+  });
+
+  it("recusa uma faixa gravada num definir variável", async () => {
+    // O bloco `definir variável` não oferece faixa nem conjunto; um documento
+    // adulterado que trouxesse uma chegaria ao motor numa forma que ele não lê.
+    const { service } = createService();
+    await service.saveDraft(AUTOMATION_ID, ORG, {
+      version: 1,
+      document: document({
+        nodes: [
+          startNode({ kind: "anyMessage" }),
+          {
+            id: "set-e5",
+            type: "setVariable",
+            position: { x: 0, y: 400 },
+            data: {
+              variableId: "var-1",
+              operation: "set",
+              value: { kind: "range", from: "08:00", to: "18:00" },
+            },
+          },
+        ],
+        variables: [{ id: "var-1", name: "faixa", type: "text", initialValue: "" }],
+      }),
+    });
+
+    const error = await service
+      .publish(AUTOMATION_ID, ORG)
+      .catch((caught: unknown) => caught);
+
+    expect((error as FlowInvalidError).issues).toEqual([
+      { nodeId: "set-e5", message: "Informe o valor" },
+    ]);
+  });
+
+  it("segue aceitando texto comparado com outra variável", async () => {
+    const { service } = createService();
+    await service.saveDraft(AUTOMATION_ID, ORG, {
+      version: 1,
+      document: document({
+        nodes: [
+          startNode({ kind: "anyMessage" }),
+          conditionNode([
+            {
+              variableId: "sys:primeiro_nome",
+              operator: "eq",
+              right: { kind: "variable", variableId: "var-1" },
+            },
+          ]),
+        ],
+        variables: [
+          { id: "var-1", name: "esperado", type: "text", initialValue: "" },
+        ],
+      }),
+    });
+
+    await expect(service.publish(AUTOMATION_ID, ORG)).resolves.toMatchObject({
+      versionNumber: 1,
+    });
   });
 });
 

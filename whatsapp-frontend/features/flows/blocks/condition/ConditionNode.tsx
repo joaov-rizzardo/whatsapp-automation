@@ -30,8 +30,10 @@ function describeComparison(
   const operator = getOperator(variable.type, comparison.operator);
   if (!operator) return variable.name;
 
-  if (operator.arity === 1) return `${variable.name} ${operator.symbol}`;
-  return `${variable.name} ${operator.symbol} ${describeValue(comparison.right, variables)}`;
+  if (operator.value === "none") return `${variable.name} ${operator.symbol}`;
+
+  const right = describeValue(comparison.right, variables, variable.type);
+  return `${variable.name} ${operator.symbol} ${right}`;
 }
 
 export function ConditionNode({ id, type, data, selected }: NodeProps) {

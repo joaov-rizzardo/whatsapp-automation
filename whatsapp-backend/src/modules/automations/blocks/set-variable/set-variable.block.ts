@@ -31,10 +31,12 @@ export const setVariableBlock = defineBlock<SetVariableData>({
       return "Não é possível gravar numa variável do sistema";
     }
 
-    if (data.value.kind === "variable" && !data.value.variableId) {
-      return "Escolha a variável de origem";
+    if (data.value.kind === "variable") {
+      return data.value.variableId ? null : "Escolha a variável de origem";
     }
-    if (data.value.kind === "literal" && data.value.value.trim() === "") {
+    // Faixa e conjunto existem para os tipos especiais, que só as condições
+    // usam — aqui só um valor ou outra variável fazem sentido.
+    if (data.value.kind !== "literal" || data.value.value.trim() === "") {
       return "Informe o valor";
     }
     return null;

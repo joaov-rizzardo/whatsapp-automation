@@ -58,7 +58,7 @@ const flowEdgeSchema = {
 
 /**
  * Só variáveis personalizadas entram no documento. As de sistema (`hora`,
- * `nome_contato`…) são constantes do runtime, de que o backend é dono
+ * `nome`…) são constantes do runtime, de que o backend é dono
  * (`blocks/system-variables.ts`) — gravá-las seria congelar uma lista nossa
  * dentro do fluxo do usuário.
  */

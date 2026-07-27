@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { automationSchema } from "@/features/automations/schemas/automation";
+import { customVariableTypes } from "@/features/flows/types/variable";
 
 /**
  * O documento do fluxo — o mesmo formato dos dois lados (spec 006, §4.1). O que
@@ -34,7 +35,7 @@ export const flowEdgeDocumentSchema = z.object({
 export const flowVariableDocumentSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.enum(["text", "number", "boolean"]),
+  type: z.enum(customVariableTypes),
   initialValue: z.string(),
 });
 

@@ -26,7 +26,7 @@ import { systemVariables } from "@/features/flows/lib/systemVariables";
 import type { NewVariableInput } from "@/features/flows/schemas/variable";
 import {
   variableTypeLabels,
-  type FlowVariable,
+  type CustomFlowVariable,
 } from "@/features/flows/types/variable";
 
 /**
@@ -45,15 +45,15 @@ export function VariablesPanel({
   onUpdate,
   onDelete,
 }: {
-  customVariables: FlowVariable[];
+  customVariables: CustomFlowVariable[];
   usage: Map<string, number>;
   onCreate: (input: NewVariableInput) => void;
   onUpdate: (id: string, input: NewVariableInput) => void;
   onDelete: (id: string) => void;
 }) {
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<FlowVariable | null>(null);
-  const [deleting, setDeleting] = useState<FlowVariable | null>(null);
+  const [editing, setEditing] = useState<CustomFlowVariable | null>(null);
+  const [deleting, setDeleting] = useState<CustomFlowVariable | null>(null);
 
   const deletingUsage = deleting ? (usage.get(deleting.id) ?? 0) : 0;
 
@@ -141,14 +141,20 @@ export function VariablesPanel({
         {systemVariables.map((variable) => (
           <div
             key={variable.id}
-            className="flex flex-col gap-0.5 rounded-lg bg-muted px-3 py-2"
+            className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2"
           >
-            <span className="font-mono text-xs text-foreground">
-              {variable.name}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {variable.description}
-            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate font-mono text-xs text-foreground">
+                {variable.name}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {variable.description}
+              </span>
+            </div>
+
+            {/* The type is what decides which operators the `se` block offers,
+                so it belongs on the card that explains the variable. */}
+            <Tag className="shrink-0">{variableTypeLabels[variable.type]}</Tag>
           </div>
         ))}
       </section>

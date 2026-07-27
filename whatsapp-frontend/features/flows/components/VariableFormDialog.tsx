@@ -22,9 +22,10 @@ import { Switch } from "@/components/ui/switch";
 import { useVariableForm } from "@/features/flows/hooks/useVariableForm";
 import type { VariableFormInput } from "@/features/flows/schemas/variable";
 import {
-  variableTypeLabels,
+  customVariableTypeLabels,
+  type CustomFlowVariable,
+  type CustomVariableType,
   type FlowVariable,
-  type VariableType,
 } from "@/features/flows/types/variable";
 
 /**
@@ -41,7 +42,7 @@ export function VariableFormDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  variable?: FlowVariable; // present = editing
+  variable?: CustomFlowVariable; // present = editing
   variables: FlowVariable[]; // custom ones, for the uniqueness check
   onSubmit: (values: VariableFormInput) => void;
 }) {
@@ -93,13 +94,15 @@ export function VariableFormDialog({
               <Label htmlFor="variable-type">Tipo</Label>
               <Select
                 value={form.type}
-                onValueChange={(value) => form.changeType(value as VariableType)}
+                onValueChange={(value) =>
+                  form.changeType(value as CustomVariableType)
+                }
               >
                 <SelectTrigger id="variable-type" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(variableTypeLabels).map(([value, label]) => (
+                  {Object.entries(customVariableTypeLabels).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
                     </SelectItem>

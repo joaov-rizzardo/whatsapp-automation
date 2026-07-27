@@ -5,7 +5,7 @@ import {
   type FlowDocument,
   type FlowViewport,
 } from "@/features/flows/schemas/flowDocument";
-import type { FlowVariable } from "@/features/flows/types/variable";
+import type { CustomFlowVariable } from "@/features/flows/types/variable";
 
 /**
  * O estado do editor → o documento do §4.1, **normalizado**.
@@ -27,8 +27,9 @@ export function serializeFlow({
 }: {
   nodes: Node[];
   edges: Edge[];
-  /** Só as personalizadas: as de sistema são do backend. */
-  variables: FlowVariable[];
+  /** Só as personalizadas: as de sistema são do backend, e são as únicas
+   *  que podem ter um tipo especial. */
+  variables: CustomFlowVariable[];
   /** Omitido quando o documento é montado só para comparação (a impressão
    *  digital ignora o viewport). */
   viewport?: FlowViewport;

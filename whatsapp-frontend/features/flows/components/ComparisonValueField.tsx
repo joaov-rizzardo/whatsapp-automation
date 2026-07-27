@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { VariableSelect } from "@/features/flows/components/VariableSelect";
 import type { ComparisonValue } from "@/features/flows/types/comparisonValue";
-import type { VariableType } from "@/features/flows/types/variable";
+import type { CustomVariableType } from "@/features/flows/types/variable";
 
 /**
  * The right-hand side of a comparison or an assignment: a typed value, or
@@ -25,6 +25,9 @@ import type { VariableType } from "@/features/flows/types/variable";
  * The literal input follows the variable's type: a number field for números, a
  * true/false select for booleanos. Letting someone type "talvez" into a boolean
  * and only finding out at runtime is exactly what typing the variables was for.
+ *
+ * The special types (hora, data…) don't come through here — their fields are
+ * `ConditionValueField`'s, because a range and a set aren't one value.
  */
 export function ComparisonValueField({
   value,
@@ -33,9 +36,10 @@ export function ComparisonValueField({
 }: {
   value: ComparisonValue;
   onChange: (value: ComparisonValue) => void;
-  type: VariableType;
+  type: CustomVariableType;
 }) {
   const usingVariable = value.kind === "variable";
+  const literal = value.kind === "literal" ? value.value : "";
 
   return (
     <div className="flex flex-1 items-center gap-1">
@@ -49,7 +53,7 @@ export function ComparisonValueField({
           />
         ) : type === "boolean" ? (
           <Select
-            value={value.value || "true"}
+            value={literal || "true"}
             onValueChange={(next) => onChange({ kind: "literal", value: next })}
           >
             <SelectTrigger className="w-full">
@@ -63,7 +67,7 @@ export function ComparisonValueField({
         ) : (
           <Input
             type={type === "number" ? "number" : "text"}
-            value={value.value}
+            value={literal}
             placeholder={type === "number" ? "0" : "Valor"}
             onChange={(event) =>
               onChange({ kind: "literal", value: event.target.value })

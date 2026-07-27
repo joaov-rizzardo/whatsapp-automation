@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ComparisonValueField } from "@/features/flows/components/ComparisonValueField";
+import { ConditionValueField } from "@/features/flows/blocks/condition/ConditionValueField";
 import {
   findVariable,
   useFlowVariablesContext,
@@ -28,8 +28,10 @@ import { getDefaultOperator, getOperator, getOperators } from "@/features/flows/
 import type { BlockModalProps } from "@/features/flows/blocks/types";
 import {
   emptyLiteral,
+  emptyValueFor,
   type ComparisonValue,
 } from "@/features/flows/types/comparisonValue";
+import type { VariableType } from "@/features/flows/types/variable";
 
 export type Comparison = {
   id: string;
@@ -88,10 +90,27 @@ export function ConditionModal({
    */
   function changeVariable(comparison: Comparison, variableId: string) {
     const variable = findVariable(variables, variableId);
+    const operator = variable ? getDefaultOperator(variable.type) : "eq";
+    const kind = variable
+      ? getOperator(variable.type, operator)?.value
+      : undefined;
+
     update(comparison.id, {
       variableId,
-      operator: variable ? getDefaultOperator(variable.type) : "eq",
-      right: emptyLiteral,
+      operator,
+      right: emptyValueFor(kind ?? "single"),
+    });
+  }
+
+  /**
+   * The value's shape belongs to the operator, so switching from `está entre`
+   * to `é depois de` has to drop the range — keeping it would leave a value
+   * nothing on screen can edit, and publishing would refuse it.
+   */
+  function changeOperator(comparison: Comparison, type: VariableType, next: string) {
+    update(comparison.id, {
+      operator: next,
+      right: emptyValueFor(getOperator(type, next)?.value ?? "single"),
     });
   }
 
@@ -159,14 +178,11 @@ export function ConditionModal({
                     />
 
                     {variable ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Select
                           value={comparison.operator}
                           onValueChange={(next) =>
-                            update(comparison.id, {
-                              operator: next,
-                              right: emptyLiteral,
-                            })
+                            changeOperator(comparison, variable.type, next)
                           }
                         >
                           <SelectTrigger className="w-44 shrink-0">
@@ -181,15 +197,16 @@ export function ConditionModal({
                           </SelectContent>
                         </Select>
 
-                        {/* Unary operators ("está vazio") take no value — the
-                            field is gone, not disabled. */}
-                        {operator?.arity === 2 ? (
-                          <ComparisonValueField
+                        {/* Operators with no right-hand side ("está vazio",
+                            "é fim de semana") lose the field, not enable it. */}
+                        {operator ? (
+                          <ConditionValueField
+                            variable={variable}
+                            valueKind={operator.value}
                             value={comparison.right}
                             onChange={(right) =>
                               update(comparison.id, { right })
                             }
-                            type={variable.type}
                           />
                         ) : null}
                       </div>

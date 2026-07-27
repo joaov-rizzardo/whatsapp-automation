@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { systemVariables } from "@/features/flows/lib/systemVariables";
 import type { NewVariableInput } from "@/features/flows/schemas/variable";
-import type { FlowVariable } from "@/features/flows/types/variable";
+import type { CustomFlowVariable } from "@/features/flows/types/variable";
 
 /**
  * The flow's custom variables. The panel is the single source of truth: a block
@@ -25,15 +25,15 @@ export function useFlowVariables({
   initialVariables,
 }: {
   onRename: (from: string, to: string) => void;
-  initialVariables: FlowVariable[];
+  initialVariables: CustomFlowVariable[];
 }) {
   const [customVariables, setCustomVariables] =
-    useState<FlowVariable[]>(initialVariables);
+    useState<CustomFlowVariable[]>(initialVariables);
 
   const createVariable = useCallback((input: NewVariableInput) => {
     // Sem contador de módulo: ele reiniciaria em zero a cada carregamento e
     // daria a uma variável nova o id de uma que já veio do servidor.
-    const variable: FlowVariable = {
+    const variable: CustomFlowVariable = {
       id: `var-${crypto.randomUUID().slice(0, 8)}`,
       name: input.name,
       type: input.type,
