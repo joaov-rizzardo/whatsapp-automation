@@ -17,7 +17,7 @@ import { useFlowVariablesContext } from "@/features/flows/components/FlowVariabl
 import { resolveHandles } from "@/features/flows/lib/resolveHandles";
 
 /**
- * The anchor where the flow begins. Unlike the white content blocks, it's a
+ * The anchor where the flow begins. Unlike the other, white blocks, it's a
  * filled brand card — the single purple accent on the canvas reads instantly as
  * "the flow starts here". A single output handle mapped from the definition, no
  * input. It's a singleton and not deletable (see createNode), so BlockActions

@@ -211,8 +211,8 @@ describe("AutomationsService.duplicate", () => {
           data: { trigger: { kind: "keyword", keywords: ["oi"] } },
         },
         ...[1, 2, 3].map((index) => ({
-          id: `content-${index}`,
-          type: "content",
+          id: `text-${index}`,
+          type: "text",
           position: { x: index * 300, y: 0 },
           data: { text: `Mensagem ${index}`, typingSeconds: 0 },
         })),

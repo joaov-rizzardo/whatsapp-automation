@@ -3,7 +3,7 @@ import type { FromSchema } from "json-schema-to-ts";
 import { defineBlock } from "../block-definition.js";
 import { extractVariableNames } from "../interpolation.js";
 
-const contentDataSchema = {
+const textDataSchema = {
   type: "object",
   additionalProperties: false,
   required: ["text", "typingSeconds"],
@@ -14,11 +14,11 @@ const contentDataSchema = {
   },
 } as const;
 
-export type ContentData = FromSchema<typeof contentDataSchema>;
+export type TextData = FromSchema<typeof textDataSchema>;
 
-export const contentBlock = defineBlock<ContentData>({
-  type: "content",
-  dataSchema: contentDataSchema,
+export const textBlock = defineBlock<TextData>({
+  type: "text",
+  dataSchema: textDataSchema,
   handles: () => ({ inputs: ["in"], outputs: ["out"] }),
   // O único bloco que referencia variáveis por nome, então o único cuja
   // validação precisa das variáveis do sistema tanto quanto das do documento.

@@ -6,17 +6,17 @@ import { Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BlockShell } from "@/features/flows/blocks/BlockShell";
 import { getDefinition } from "@/features/flows/blocks/registry";
-import type { ContentData } from "@/features/flows/blocks/content/ContentModal";
+import type { TextData } from "@/features/flows/blocks/text/TextModal";
 
 /**
- * A content block: a preview of the message it sends, plus a badge with the
+ * A text block: a preview of the message it sends, plus a badge with the
  * typing time when there is one.
  */
-export function ContentNode({ id, type, data, selected }: NodeProps) {
+export function TextNode({ id, type, data, selected }: NodeProps) {
   const definition = getDefinition(type ?? "");
   if (!definition) return null;
 
-  const { text, typingSeconds } = data as unknown as ContentData;
+  const { text, typingSeconds } = data as unknown as TextData;
 
   return (
     <BlockShell

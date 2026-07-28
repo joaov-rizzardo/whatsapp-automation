@@ -1,7 +1,7 @@
 /**
  * `{{variavel}}` placeholders inside a message text — the one place a block
  * references a variable by name instead of by id (a user types into a textarea;
- * an id there would be unreadable). That's why the content block implements
+ * an id there would be unreadable). That's why the text block implements
  * `renameVariable`.
  */
 

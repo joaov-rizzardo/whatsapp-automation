@@ -1,19 +1,19 @@
 import { MessageSquareText } from "lucide-react";
 
 import { defineBlock } from "@/features/flows/blocks/types";
-import { ContentNode } from "@/features/flows/blocks/content/ContentNode";
+import { TextNode } from "@/features/flows/blocks/text/TextNode";
 import {
-  ContentModal,
-  type ContentData,
-} from "@/features/flows/blocks/content/ContentModal";
+  TextModal,
+  type TextData,
+} from "@/features/flows/blocks/text/TextModal";
 import {
   extractVariableNames,
   renameInterpolation,
 } from "@/features/flows/lib/interpolation";
 
-export const contentDefinition = defineBlock<ContentData>({
-  type: "content",
-  label: "Conteúdo",
+export const textDefinition = defineBlock<TextData>({
+  type: "text",
+  label: "Texto",
   description: "Envia uma mensagem de texto",
   icon: MessageSquareText,
   category: "message",
@@ -24,8 +24,8 @@ export const contentDefinition = defineBlock<ContentData>({
   addable: true,
   singleton: false,
   createData: () => ({ text: "", typingSeconds: 0 }),
-  node: ContentNode,
-  modal: ContentModal,
+  node: TextNode,
+  modal: TextModal,
 
   // The only block that references variables by *name* (they're typed inside
   // the message), so it's the only one that has to resolve names to ids — and

@@ -179,10 +179,10 @@ function startNode(
   return { id, type: "start", position: { x: 0, y: 0 }, data: { trigger } };
 }
 
-function contentNode(id = "content-b2", text = "Olá!"): FlowNodeDocument {
+function textNode(id = "text-b2", text = "Olá!"): FlowNodeDocument {
   return {
     id,
-    type: "content",
+    type: "text",
     position: { x: 320, y: 0 },
     data: { text, typingSeconds: 0 },
   };
@@ -273,7 +273,7 @@ describe("deriveTrigger e countBlocks", () => {
     const doc = document({
       nodes: [
         startNode({ kind: "keyword", keywords: ["oi", "olá"] }),
-        contentNode(),
+        textNode(),
       ],
     });
 
@@ -303,7 +303,7 @@ describe("FlowService.saveDraft recusa lixo estrutural", () => {
 
   it("id de nó repetido", async () => {
     const doc = document({
-      nodes: [startNode(), contentNode("dup"), contentNode("dup")],
+      nodes: [startNode(), textNode("dup"), textNode("dup")],
     });
 
     await expect(save(doc)).rejects.toBeInstanceOf(ValidationError);
@@ -311,7 +311,7 @@ describe("FlowService.saveDraft recusa lixo estrutural", () => {
 
   it("aresta apontando para um nó que não existe", async () => {
     const doc = document({
-      nodes: [startNode(), contentNode()],
+      nodes: [startNode(), textNode()],
       edges: [edge("start-a1", "out", "fantasma")],
     });
 
@@ -320,8 +320,8 @@ describe("FlowService.saveDraft recusa lixo estrutural", () => {
 
   it("sourceHandle que o tipo não declara", async () => {
     const doc = document({
-      nodes: [startNode(), contentNode()],
-      edges: [edge("start-a1", "saida-inventada", "content-b2")],
+      nodes: [startNode(), textNode()],
+      edges: [edge("start-a1", "saida-inventada", "text-b2")],
     });
 
     await expect(save(doc)).rejects.toBeInstanceOf(ValidationError);
@@ -332,8 +332,8 @@ describe("FlowService.saveDraft recusa lixo estrutural", () => {
       nodes: [
         startNode(),
         {
-          id: "content-b2",
-          type: "content",
+          id: "text-b2",
+          type: "text",
           position: { x: 0, y: 0 },
           data: { text: "oi", typingSeconds: "muito" },
         },
@@ -350,7 +350,7 @@ describe("FlowService.saveDraft recusa lixo estrutural", () => {
   });
 
   it("zero nós de início", async () => {
-    await expect(save(document({ nodes: [contentNode()] }))).rejects.toBeInstanceOf(
+    await expect(save(document({ nodes: [textNode()] }))).rejects.toBeInstanceOf(
       ValidationError,
     );
   });
@@ -392,7 +392,7 @@ describe("FlowService.saveDraft aceita um rascunho incompleto", () => {
     const doc = document({
       nodes: [
         startNode({ kind: "none" }),
-        contentNode("content-b2", ""),
+        textNode("text-b2", ""),
         {
           id: "randomizer-c3",
           type: "randomizer",
@@ -417,7 +417,7 @@ describe("FlowService.saveDraft aceita um rascunho incompleto", () => {
 
   it("um bloco solto, sem nenhuma conexão", async () => {
     const { service } = createService();
-    const doc = document({ nodes: [startNode(), contentNode()] });
+    const doc = document({ nodes: [startNode(), textNode()] });
 
     await expect(
       service.saveDraft(AUTOMATION_ID, ORG, { version: 1, document: doc }),
@@ -427,10 +427,10 @@ describe("FlowService.saveDraft aceita um rascunho incompleto", () => {
   it("as saídas configuradas de um randomizador", async () => {
     const { service } = createService();
     const doc = document({
-      nodes: [startNode(), randomizerNode(), contentNode()],
+      nodes: [startNode(), randomizerNode(), textNode()],
       edges: [
         edge("start-a1", "out", "randomizer-c3"),
-        edge("randomizer-c3", "branch-a", "content-b2"),
+        edge("randomizer-c3", "branch-a", "text-b2"),
       ],
     });
 
@@ -446,7 +446,7 @@ describe("FlowService.saveDraft", () => {
   it("deriva trigger e blockCount para a automação", async () => {
     const { service, automations } = createService();
     const doc = document({
-      nodes: [startNode({ kind: "keyword", keywords: ["oi"] }), contentNode()],
+      nodes: [startNode({ kind: "keyword", keywords: ["oi"] }), textNode()],
     });
 
     const saved = await service.saveDraft(AUTOMATION_ID, ORG, {
@@ -473,7 +473,7 @@ describe("FlowService.saveDraft", () => {
 
     const second = await service.saveDraft(AUTOMATION_ID, ORG, {
       version: first.version,
-      document: document({ nodes: [startNode(), contentNode()] }),
+      document: document({ nodes: [startNode(), textNode()] }),
     });
     expect(second.version).toBe(3);
   });
@@ -485,7 +485,7 @@ describe("FlowService.saveDraft", () => {
     await expect(
       service.saveDraft(AUTOMATION_ID, ORG, {
         version: 1,
-        document: document({ nodes: [startNode(), contentNode()] }),
+        document: document({ nodes: [startNode(), textNode()] }),
       }),
     ).rejects.toBeInstanceOf(VersionConflictError);
 
@@ -532,7 +532,7 @@ describe("FlowService.publish", () => {
 
   it("recusa um fluxo sem gatilho, com o nó no problema", async () => {
     const context = await saveAndPublish(
-      document({ nodes: [startNode(), contentNode()] }),
+      document({ nodes: [startNode(), textNode()] }),
     );
 
     const error = await context.service
@@ -550,7 +550,7 @@ describe("FlowService.publish", () => {
       document({
         nodes: [
           startNode({ kind: "keyword", keywords: ["oi"] }),
-          contentNode("content-b2", "   "),
+          textNode("text-b2", "   "),
           {
             id: "randomizer-c3",
             type: "randomizer",
@@ -572,7 +572,7 @@ describe("FlowService.publish", () => {
 
     expect(error).toBeInstanceOf(FlowInvalidError);
     expect((error as FlowInvalidError).issues).toEqual([
-      { nodeId: "content-b2", message: "Sem mensagem" },
+      { nodeId: "text-b2", message: "Sem mensagem" },
       { nodeId: "randomizer-c3", message: "As saídas somam 80%" },
     ]);
   });
@@ -582,7 +582,7 @@ describe("FlowService.publish", () => {
       document({
         nodes: [
           startNode({ kind: "anyMessage" }),
-          contentNode("content-b2", "Olá {{nome}}, hoje é {{dia_semana}}!"),
+          textNode("text-b2", "Olá {{nome}}, hoje é {{dia_semana}}!"),
         ],
       }),
     );
@@ -597,7 +597,7 @@ describe("FlowService.publish", () => {
       document({
         nodes: [
           startNode({ kind: "anyMessage" }),
-          contentNode("content-b2", "Olá {{nome_cliente}}!"),
+          textNode("text-b2", "Olá {{nome_cliente}}!"),
         ],
       }),
     );
@@ -607,14 +607,14 @@ describe("FlowService.publish", () => {
       .catch((caught: unknown) => caught);
 
     expect((error as FlowInvalidError).issues).toEqual([
-      { nodeId: "content-b2", message: "A variável {{nome_cliente}} não existe" },
+      { nodeId: "text-b2", message: "A variável {{nome_cliente}} não existe" },
     ]);
   });
 
   it("não bloqueia por nó inalcançável a partir do início", async () => {
     const context = await saveAndPublish(
       document({
-        nodes: [startNode({ kind: "anyMessage" }), contentNode("content-b2", "solto")],
+        nodes: [startNode({ kind: "anyMessage" }), textNode("text-b2", "solto")],
       }),
     );
 
@@ -936,7 +936,7 @@ describe("FlowRepository", () => {
     const automation = await seedAutomation(organizationId);
 
     try {
-      const changed = document({ nodes: [startNode(), contentNode()] });
+      const changed = document({ nodes: [startNode(), textNode()] });
 
       const stale = await flows.saveDraft({
         automationId: automation.id,
@@ -966,7 +966,7 @@ describe("FlowRepository", () => {
         automationId: automation.id,
         expectedVersion: 1,
         document: document({
-          nodes: [startNode({ kind: "keyword", keywords: ["oi"] }), contentNode()],
+          nodes: [startNode({ kind: "keyword", keywords: ["oi"] }), textNode()],
         }),
         trigger: { kind: "keyword", keywords: ["oi"] },
         blockCount: 2,
@@ -1142,11 +1142,11 @@ describe("rotas de automação e fluxo", () => {
       nodes: [
         startNode({ kind: "keyword", keywords: ["oi"] }),
         randomizerNode(),
-        contentNode("content-b2", "Olá {{nome_cliente}}!"),
+        textNode("text-b2", "Olá {{nome_cliente}}!"),
       ],
       edges: [
         edge("start-a1", "out", "randomizer-c3"),
-        edge("randomizer-c3", "branch-a", "content-b2"),
+        edge("randomizer-c3", "branch-a", "text-b2"),
       ],
       variables: [
         { id: "var-a1", name: "nome_cliente", type: "text", initialValue: "" },
@@ -1236,7 +1236,7 @@ describe("rotas de automação e fluxo", () => {
       payload: {
         version: 1,
         document: document({
-          nodes: [startNode({ kind: "anyMessage" }), contentNode("content-b2", "")],
+          nodes: [startNode({ kind: "anyMessage" }), textNode("text-b2", "")],
         }),
       },
     });
@@ -1250,7 +1250,7 @@ describe("rotas de automação e fluxo", () => {
     expect(response.statusCode).toBe(422);
     expect(response.json()).toMatchObject({
       code: "FLOW_INVALID",
-      issues: [{ nodeId: "content-b2", message: "Sem mensagem" }],
+      issues: [{ nodeId: "text-b2", message: "Sem mensagem" }],
     });
   });
 
@@ -1324,7 +1324,7 @@ describe("rotas de automação e fluxo", () => {
       payload: {
         version: 2,
         document: document({
-          nodes: [startNode({ kind: "anyMessage" }), contentNode()],
+          nodes: [startNode({ kind: "anyMessage" }), textNode()],
         }),
       },
     });
@@ -1343,7 +1343,7 @@ describe("rotas de automação e fluxo", () => {
       payload: {
         version: 1,
         document: document({
-          nodes: [startNode({ kind: "anyMessage" }), contentNode()],
+          nodes: [startNode({ kind: "anyMessage" }), textNode()],
         }),
       },
     });

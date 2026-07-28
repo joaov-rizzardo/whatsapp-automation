@@ -2,11 +2,11 @@ import { Ajv, type ValidateFunction } from "ajv";
 
 import type { BlockDefinition, BlockHandles } from "./block-definition.js";
 import { conditionBlock } from "./condition/condition.block.js";
-import { contentBlock } from "./content/content.block.js";
 import { delayBlock } from "./delay/delay.block.js";
 import { randomizerBlock } from "./randomizer/randomizer.block.js";
 import { setVariableBlock } from "./set-variable/set-variable.block.js";
 import { startBlock } from "./start/start.block.js";
+import { textBlock } from "./text/text.block.js";
 import { waitReplyBlock } from "./wait-reply/wait-reply.block.js";
 
 /**
@@ -16,7 +16,7 @@ import { waitReplyBlock } from "./wait-reply/wait-reply.block.js";
  */
 const definitions: BlockDefinition[] = [
   startBlock,
-  contentBlock,
+  textBlock,
   waitReplyBlock,
   conditionBlock,
   setVariableBlock,

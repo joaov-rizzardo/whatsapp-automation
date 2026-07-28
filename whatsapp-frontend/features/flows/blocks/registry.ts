@@ -5,7 +5,7 @@ import {
   type BlockCategory,
 } from "@/features/flows/blocks/categories";
 import { startDefinition } from "@/features/flows/blocks/start/definition";
-import { contentDefinition } from "@/features/flows/blocks/content/definition";
+import { textDefinition } from "@/features/flows/blocks/text/definition";
 import { waitReplyDefinition } from "@/features/flows/blocks/waitReply/definition";
 import { conditionDefinition } from "@/features/flows/blocks/condition/definition";
 import { randomizerDefinition } from "@/features/flows/blocks/randomizer/definition";
@@ -22,7 +22,7 @@ import type { BlockDefinition } from "@/features/flows/blocks/types";
  */
 const definitions: BlockDefinition[] = [
   startDefinition,
-  contentDefinition,
+  textDefinition,
   waitReplyDefinition,
   conditionDefinition,
   randomizerDefinition,

@@ -14,25 +14,25 @@ import { Label } from "@/components/ui/label";
 import { MessageComposer } from "@/features/flows/components/MessageComposer";
 import type { BlockModalProps } from "@/features/flows/blocks/types";
 
-/** The data a content block configures. */
-export type ContentData = {
+/** The data a text block configures. */
+export type TextData = {
   text: string;
   /** Seconds of "digitando…" before the message goes out. 0 turns it off. */
   typingSeconds: number;
 };
 
 /**
- * Config for a content block: the message itself (with emoji and variable
+ * Config for a text block: the message itself (with emoji and variable
  * insertion) and how long the bot appears to type it. Renders the inner fields
  * only — the Dialog/DialogContent wrapper is owned by the modal host
  * (NodeConfigModal). "Salvar" writes back via `onChange` and closes;
  * "Cancelar" discards the local edit.
  */
-export function ContentModal({
+export function TextModal({
   data,
   onChange,
   onClose,
-}: BlockModalProps<ContentData>) {
+}: BlockModalProps<TextData>) {
   const [text, setText] = useState(data.text);
   const [typingSeconds, setTypingSeconds] = useState(data.typingSeconds);
 
@@ -44,7 +44,7 @@ export function ContentModal({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Configurar conteúdo</DialogTitle>
+        <DialogTitle>Configurar texto</DialogTitle>
         <DialogDescription>
           Escreva a mensagem de texto que este bloco vai enviar.
         </DialogDescription>
@@ -52,15 +52,15 @@ export function ContentModal({
 
       <div className="flex flex-col gap-4 py-2">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="content-text">Mensagem</Label>
-          <MessageComposer id="content-text" value={text} onChange={setText} />
+          <Label htmlFor="text-message">Mensagem</Label>
+          <MessageComposer id="text-message" value={text} onChange={setText} />
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor="content-typing">Tempo de digitação</Label>
+          <Label htmlFor="text-typing">Tempo de digitação</Label>
           <div className="flex items-center gap-2">
             <Input
-              id="content-typing"
+              id="text-typing"
               type="number"
               min={0}
               className="w-28"
