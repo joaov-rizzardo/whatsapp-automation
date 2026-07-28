@@ -143,7 +143,7 @@ export default function DesignSystemPage() {
           <div className="flex flex-col gap-2">
             <Label htmlFor="channel">Canal</Label>
             <Select>
-              <SelectTrigger id="channel">
+              <SelectTrigger id="channel" className="w-full">
                 <SelectValue placeholder="Selecione um canal" />
               </SelectTrigger>
               <SelectContent>

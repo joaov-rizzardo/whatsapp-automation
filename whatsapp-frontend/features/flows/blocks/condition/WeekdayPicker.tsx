@@ -39,11 +39,13 @@ export function WeekdayPicker({
             title={day.label}
             onClick={() => toggle(day.value)}
             className={cn(
-              "size-9 rounded-lg border text-sm font-medium transition-colors",
-              "focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none",
+              // Mesma altura, mesmo raio e mesmo foco dos campos da linha —
+              // são chips, mas dividem a linha com um select.
+              "size-10 rounded-md border text-sm font-medium transition-[color,box-shadow,border-color,background-color] duration-fast ease-standard",
+              "focus-visible:border-ring focus-visible:ring-4 focus-visible:ring-ring/20 focus-visible:outline-none",
               active
                 ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-card text-muted-foreground hover:bg-muted",
+                : "border-input bg-card text-muted-foreground hover:bg-muted",
             )}
           >
             {day.initial}

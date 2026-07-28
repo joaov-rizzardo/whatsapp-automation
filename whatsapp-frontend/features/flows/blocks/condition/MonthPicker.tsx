@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { fieldVariants } from "@/components/ui/field-base";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatSpecialSet, months } from "@/features/flows/lib/specialValues";
@@ -32,8 +33,10 @@ export function MonthPicker({
     <Popover>
       <PopoverTrigger
         className={cn(
-          "flex h-10 flex-1 items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 text-base shadow-xs",
-          "hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none",
+          // Tem cara de select, então usa a medida do campo — não uma cópia
+          // aproximada dela.
+          fieldVariants(),
+          "flex w-fit flex-1 items-center justify-between gap-2 text-left hover:bg-muted/60",
           values.length === 0 && "text-muted-foreground",
         )}
       >

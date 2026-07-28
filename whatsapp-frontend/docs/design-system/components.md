@@ -22,8 +22,9 @@ Os componentes do shadcn foram ajustados no lugar, dentro de `components/ui/`. D
 | --- | --- | --- | --- |
 | Button | `button` | `components/ui/button.tsx` | variantes e tamanhos reescritos |
 | IconButton | `button` | — | é `<Button size="icon">`, não um componente separado |
-| Input | `input` | `components/ui/input.tsx` | altura 40px, raio 12px, foco roxo |
-| Select | `select` | `components/ui/select.tsx` | herda os tokens |
+| Input | `input` | `components/ui/input.tsx` | `fieldVariants` — altura 40px, raio 12px, foco roxo |
+| Textarea | `textarea` | `components/ui/textarea.tsx` | `fieldVariants` + cresce com o conteúdo |
+| Select | `select` | `components/ui/select.tsx` | gatilho com `fieldVariants`, tamanhos `default` e `sm` |
 | Checkbox | `checkbox` | `components/ui/checkbox.tsx` | herda os tokens |
 | Radio | `radio-group` | `components/ui/radio-group.tsx` | herda os tokens |
 | Switch | `switch` | `components/ui/switch.tsx` | thumb com `ease-spring` |
@@ -50,6 +51,21 @@ Os componentes do shadcn foram ajustados no lugar, dentro de `components/ui/`. D
 **No máximo um botão `default` (primário) por tela.**
 
 Tamanhos: `sm` (32px), `default` (40px), `lg` (48px) — mais generosos que o padrão do shadcn, conforme o design system. Os equivalentes de ícone: `icon-sm`, `icon`, `icon-lg`.
+
+## Campos de formulário
+
+**Todo campo sai de `components/ui/field-base.ts`.** `fieldVariants` é a forma de um campo — altura 40px, raio 12px (`rounded-md`), borda `--input`, fundo `bg-card`, texto 15px (`text-base`) e o anel roxo de foco (`ring-4 ring-ring/20`) — e `Input`, `Textarea` e o gatilho do `Select` a consomem. Um campo de texto e um select lado a lado (o par "5 minutos" no editor de fluxo) têm que ler como um só campo; foi essa a divergência que criou o arquivo.
+
+```tsx
+<Input placeholder="Ex: Boas-vindas" />
+<SelectTrigger className="w-full">…</SelectTrigger>   {/* 40px */}
+<SelectTrigger size="sm" className="w-28">…</SelectTrigger>  {/* 32px, par do Button sm */}
+```
+
+Dois pontos ao usar:
+
+- **Largura fica de fora do `fieldVariants`** de propósito, porque cada linha resolve a sua: `Input` e `Textarea` já vêm `w-full`, o gatilho do `Select` vem `w-fit` e espera um `w-full`, um `flex-1` ou uma largura fixa de quem monta a linha.
+- **Um gatilho escrito à mão com cara de campo consome o mesmo `fieldVariants`** — é o que o `MonthPicker` do editor faz com o seu `PopoverTrigger`. Recriar a medida à mão é como as alturas e os raios desencontram.
 
 ## Badge
 
