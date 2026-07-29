@@ -62,6 +62,32 @@ export function validateBlockData(type: string, data: unknown): string | null {
 }
 
 /**
+ * Uma definição que o motor sabe rodar. O `execute` deixa de ser opcional —
+ * quem passou por aqui não precisa mais checá-lo.
+ */
+export type ExecutableBlockDefinition = BlockDefinition &
+  Required<Pick<BlockDefinition, "execute">>;
+
+/**
+ * A definição executável de um tipo, ou `null` — para o tipo desconhecido e
+ * para o que existe mas ainda não roda, que do ponto de vista do motor são a
+ * mesma coisa: não há o que executar.
+ *
+ * É a **única** fonte de "isto é executável" (spec 008 §4.10). A publicação
+ * pergunta aqui e o motor pergunta aqui, então nenhuma lista precisa ser
+ * mantida em dia quando um bloco ganhar o seu `execute`.
+ */
+export function getExecutable(type: string): ExecutableBlockDefinition | null {
+  const definition = getBlock(type);
+  if (!definition?.execute) return null;
+  return definition as ExecutableBlockDefinition;
+}
+
+export function isExecutable(type: string): boolean {
+  return getExecutable(type) !== null;
+}
+
+/**
  * Os handles que um nó expõe para os dados que ele tem agora. Espelha o
  * `resolveHandles` do frontend, e é contra isto que cada aresta é conferida.
  */

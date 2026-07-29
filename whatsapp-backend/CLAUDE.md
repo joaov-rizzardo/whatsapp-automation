@@ -7,7 +7,7 @@ Node.js + TypeScript + Fastify backend for the WhatsApp automation project. Data
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Runs the **HTTP server** with `tsx watch` (hot reload) |
-| `npm run dev:worker` | Runs the **queue worker** with `tsx watch` (the evolution-events consumer) |
+| `npm run dev:worker` | Runs the **queue worker** with `tsx watch` (AMQP consumers + the flow engine) |
 | `npm run build` | Type-checks and emits to `dist/` |
 | `npm start` | Runs the compiled HTTP server |
 | `npm run start:worker` | Runs the compiled worker |
@@ -16,7 +16,7 @@ Node.js + TypeScript + Fastify backend for the WhatsApp automation project. Data
 
 Server reads `PORT` (default 3333) and `HOST` (default `0.0.0.0`) from the environment.
 
-**The backend is two processes** (since spec 003): the HTTP server (`server.ts`) and a dedicated worker (`worker.ts`) that consumes Evolution events from RabbitMQ. Both share the same codebase, infra plugins and services — they only differ in entrypoint. For any feature that consumes the queue, run both (`npm run dev` **and** `npm run dev:worker`).
+**The backend is two processes** (since spec 003): the HTTP server (`server.ts`) and a dedicated worker (`worker.ts`). The worker consumes Evolution events from RabbitMQ **and**, since spec 008, runs the BullMQ flow engine over Redis. Both share the same codebase, infra plugins and services — they only differ in entrypoint. For any feature that consumes the queue, run both (`npm run dev` **and** `npm run dev:worker`).
 
 ## Architecture
 
@@ -49,6 +49,12 @@ src/
       evolution-events.consumer.ts   # connection.update + qrcode.updated -> WhatsappConnectionService
       inbound-messages.consumer.ts   # messages.upsert -> InboundMessageService
       evolution-events.topology.ts   # exchange/queues/routing keys/DLX in one place
+    flow-runtime/               # the engine (spec 008). No routes: a queue drives it
+      keyword.ts / trigger-matcher.ts / flow-graph.ts / variables.ts   # pure
+      flow-runtime.service.ts        # onInboundMessage (decide) + runStep (walk)
+      flow-runtime.repository.ts     # the two compare-and-sets live here
+      flow-runtime.worker.ts         # BullMQ adapter — the third kind of input adapter
+      scheduler.ts / whatsapp-gateway.ts   # the ports' implementations
   shared/
     errors.ts            # domain error classes
 ```
@@ -173,7 +179,16 @@ Inbound messages are the third slice (spec 007) and the **second registry**:
 - **Validation is layered by how much we control the shape** (spec 007 §4.6): the envelope and the core of `data` get Ajv schemas (failure → dead letter); the per-type node is read defensively inside its parser (failure → `unsupported`). Everywhere: `additionalProperties: true`, and `required` only on fields we actually read — the captured payload already carries fields no doc mentions (`remoteJidAlt`, `addressingMode`), and a newer Evolution will add more.
 - Three filters that exist from day one, all before any query: `key.fromMe` (a bot that answers everything answers itself), group/broadcast, and messages older than 5 minutes (Baileys replays history on connect).
 
-> ⚠️ **One deliberate, temporary exception to the logging rule below:** `inbound-messages.service.ts` logs the sender's number, name and message text, marked `// PII — temporário (spec 007 §4.7)`. It exists because there is no persistence yet, so the log is the only way to verify the right message arrived. **It comes out when messages are persisted** — the log goes back to `{ instanceName, kind, externalId }`.
+The flow engine is the fourth slice (spec 008) and the one that makes the product *do* something:
+
+- **`modules/flow-runtime/`** — the first module with **three** kinds of caller and no routes at all. `onInboundMessage` runs in the AMQP consumer (decide, record, enqueue — **never** walk a flow); `runStep` runs in the BullMQ worker and is the **only writer of execution progress**. That split is what keeps a two-hour `aguardar` from holding an unacked AMQP message, and what removes the whole class of races between the two entry paths.
+- **Four pure files carry the logic that errs** — `keyword.ts` (whole-word match over normalized text, tokens not regex: building a regex from user input is how you write a ReDoS by accident), `trigger-matcher.ts` (keyword > firstContact > anyMessage, then most recently published, then id), `flow-graph.ts` (`next(nodeId, handle)`), `variables.ts` (document + system, `America/Sao_Paulo`, `render`). They need no I/O, so their tests run in milliseconds.
+- **The block registry now executes.** `blocks/block-runtime.ts` holds the ports (`StepOutcome`, `ResumeInput`, `RuntimeContext`) and `block-definition.ts` the `execute?`/`resume?`. **The contract lives under `blocks/`, not under `flow-runtime/`, on purpose**: the engine imports the registry, so a block importing the engine would tie the two together and "a block is one file" would stop being true. **Suspending is a `return`, not an `if` in the engine** — `sleep` and `awaitReply` are ordinary outcomes, so "wait for payment" will cost no engine change. `start`, `text`, `delay` and `waitReply` execute today; `condition`, `setVariable` and `randomizer` do not, and **that is what blocks publishing** (`isExecutable` is asked by both the engine and `collectSemanticIssues` — one source, no second list to keep in sync).
+- **Two compare-and-sets, both in the repository, both proven against the real PostgreSQL.** `whatsapp_contact.activeExecutionId` is the one-bot-at-a-time lock — and the `SELECT … FOR UPDATE` comes **before** the INSERT, because inserting first deadlocks: the INSERT already takes a `FOR KEY SHARE` on the contact row via the FK, and concurrent transactions then all ask for the exclusive lock. `flow_execution.waitToken` is the generation token against BullMQ's at-least-once: every job carries the token it was created with, and a stale one dies silently in the CAS.
+- **`releaseStep` is the other half of that token rule, and it is not optional.** BullMQ retries a job with its **original payload**, so a step that died mid-way (a failed send) would come back carrying a token `claimStep` already burned — and die in the CAS, silently, leaving the conversation stopped forever. Rolling the token back makes the retry find the state it found the first time.
+- `plugins/queue.ts` (the shared Redis connection — BullMQ **and** the dedupe key), `lib/queue/queue.ts` (`maxRetriesPerRequest: null`, which the Worker requires and inherits through `duplicate()`), and `flow-runtime.worker.ts`, the **third kind of input adapter** after `routes.ts` and the AMQP consumers. Never `await worker.run()` in a hook — it is the run loop and only resolves on close; awaiting it times out the `onReady` and kills the process.
+- Migration `add_flow_runtime` (`whatsapp_contact`, `flow_execution`, `execution_message`). `bullmq` and `ioredis` became direct dependencies, and `REDIS_URL` (db 0 — Evolution holds db 1) joined `config/env.ts`.
+- **`InboundMessageSink`** is how 007 feeds 008 without either module importing the other: an optional port on `InboundMessageService`, wired in the consumer, which still drives exactly one service.
 
 **Rule the automations feature adds, for every nested resource that follows: look it up by `(id, organizationId)`, and answer 404 — never 403.** The repository deliberately exposes no `findById(id)`. A 403 would confirm that the resource exists, which is exactly what an id from another organization must not learn. `automations.test.ts`/`flow.test.ts` assert it on every `:id` route.
 
@@ -181,7 +196,7 @@ Inbound messages are the third slice (spec 007) and the **second registry**:
 
 `json-schema-to-ts` is installed and used by `whatsapp-connection.schema.ts` (`FromSchema`) — the first route with a typed body. Other routes may still declare plain JSON Schema.
 
-Modules beyond `me/`, `whatsapp-connection/`, `evolution-events/`, `automations/` and `inbound-messages/` are still the **target**, not what exists.
+Modules beyond `me/`, `whatsapp-connection/`, `evolution-events/`, `automations/`, `inbound-messages/` and `flow-runtime/` are still the **target**, not what exists.
 
 ## Better Auth and the layering rule
 

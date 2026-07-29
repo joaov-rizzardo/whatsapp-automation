@@ -3,9 +3,11 @@ import Fastify from "fastify";
 import { env } from "./config/env.js";
 import evolutionPlugin from "./plugins/evolution.js";
 import prismaPlugin from "./plugins/prisma.js";
+import queuePlugin from "./plugins/queue.js";
 import rabbitmqPlugin from "./plugins/rabbitmq.js";
 import evolutionEventsConsumer from "./modules/evolution-events/evolution-events.consumer.js";
 import inboundMessagesConsumer from "./modules/evolution-events/inbound-messages.consumer.js";
+import flowRuntimeWorker from "./modules/flow-runtime/flow-runtime.worker.js";
 
 /**
  * The backend's second process. It mirrors server.ts in shape but never opens a
@@ -23,10 +25,13 @@ async function start(): Promise<void> {
     await app.register(prismaPlugin);
     await app.register(evolutionPlugin);
     await app.register(rabbitmqPlugin);
+    await app.register(queuePlugin);
     await app.register(evolutionEventsConsumer);
+    // Before the inbound consumer: it feeds the engine, which this registers.
+    await app.register(flowRuntimeWorker);
     await app.register(inboundMessagesConsumer);
     await app.ready(); // each consumer's onReady starts consuming here
-    app.log.info("worker ready, consuming evolution events and inbound messages");
+    app.log.info("worker ready: evolution events, inbound messages and flow runtime");
   } catch (err) {
     app.log.error(err, "worker failed to start");
     process.exit(1);

@@ -7,6 +7,7 @@ import {
   InboundMessageService,
   type ConnectionLookup,
 } from "./inbound-messages.service.js";
+import type { InboundMessage } from "./inbound-messages.types.js";
 import { resolveParser } from "./parsers/registry.js";
 
 const INSTANCE = "vex-software-5f81089e";
@@ -329,5 +330,73 @@ describe("InboundMessageService", () => {
     await expect(
       service.handleInboundMessage("someone-elses-instance", buildData()),
     ).rejects.toThrow(NotFoundError);
+  });
+
+  // The seam the flow engine plugs into (spec 008 §4.11). This module knows
+  // nothing about it — only that something may want what came through.
+  describe("the sink", () => {
+    function collectingSink() {
+      const handled: InboundMessage[] = [];
+      return {
+        handled,
+        async handle(message: InboundMessage) {
+          handled.push(message);
+        },
+      };
+    }
+
+    it("receives a processed message, with its organization resolved", async () => {
+      const sink = collectingSink();
+      const service = new InboundMessageService(
+        buildLookup(),
+        silentLogger,
+        () => new Date(),
+        sink,
+      );
+
+      await service.handleInboundMessage(INSTANCE, buildData());
+
+      expect(sink.handled).toHaveLength(1);
+      expect(sink.handled[0]).toMatchObject({
+        organizationId: ORGANIZATION_ID,
+        content: { kind: "text", text: "Mensagem de teste" },
+      });
+    });
+
+    it("never sees a message that was filtered out", async () => {
+      const sink = collectingSink();
+      const service = new InboundMessageService(
+        buildLookup(),
+        silentLogger,
+        () => new Date(),
+        sink,
+      );
+
+      await service.handleInboundMessage(
+        INSTANCE,
+        buildData({ key: { remoteJid: "5511956291095@s.whatsapp.net", fromMe: true, id: "E1" } }),
+      );
+
+      expect(sink.handled).toEqual([]);
+    });
+
+    // The engine failing must nack the message so the broker redelivers it —
+    // swallowing here would drop a customer's message on the floor.
+    it("lets a failure out, so the consumer can nack", async () => {
+      const service = new InboundMessageService(
+        buildLookup(),
+        silentLogger,
+        () => new Date(),
+        {
+          async handle() {
+            throw new Error("engine exploded");
+          },
+        },
+      );
+
+      await expect(
+        service.handleInboundMessage(INSTANCE, buildData()),
+      ).rejects.toThrow("engine exploded");
+    });
   });
 });

@@ -25,6 +25,10 @@ async function inboundMessagesConsumer(app: FastifyInstance): Promise<void> {
   const service = new InboundMessageService(
     createWhatsappConnectionRepository(app.prisma),
     log,
+    () => new Date(),
+    // The engine, as a sink. The consumer still drives ONE service — this is
+    // the composition root wiring 007 to 008, not the consumer knowing both.
+    { handle: (message) => app.flowRuntime.onInboundMessage(message) },
   );
 
   startQueueConsumer(app, {
@@ -47,5 +51,6 @@ async function inboundMessagesConsumer(app: FastifyInstance): Promise<void> {
 
 export default fp(inboundMessagesConsumer, {
   name: "inbound-messages",
-  dependencies: ["prisma", "rabbitmq"],
+  // flow-runtime-worker decorates app.flowRuntime, the sink this consumer feeds.
+  dependencies: ["prisma", "rabbitmq", "flow-runtime-worker"],
 });

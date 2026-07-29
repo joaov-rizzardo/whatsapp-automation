@@ -21,6 +21,7 @@ import type {
 } from "./blocks/block-definition.js";
 import {
   getBlock,
+  isExecutable,
   resolveBlockHandles,
   START_BLOCK_TYPE,
   validateBlockData,
@@ -218,15 +219,34 @@ function assertStructurallyValid(document: FlowDocument): void {
   );
 }
 
+/**
+ * O que o editor mostra no nó de um bloco que o motor ainda não sabe rodar.
+ *
+ * A alternativa era publicar um fluxo que morre no meio da conversa, sem tela
+ * nenhuma para contar o que houve (spec 008 §4.10). A restrição some sozinha
+ * conforme cada bloco ganha o seu `execute` — nada aqui muda de novo.
+ */
+export const BLOCK_NOT_EXECUTABLE_MESSAGE = "Este bloco ainda não pode ser executado";
+
 /** As regras de cada bloco, que só valem na publicação. */
 function collectSemanticIssues(document: FlowDocument): ValidationIssue[] {
   const context = validationContext(document);
   const issues: ValidationIssue[] = [];
 
   for (const node of document.nodes) {
+    // "Tem `execute`" e "é publicável" são a mesma frase, perguntada ao mesmo
+    // registry que o motor consulta — então não existe uma segunda lista de
+    // tipos executáveis para esquecer de atualizar.
+    if (!isExecutable(node.type)) {
+      issues.push({ nodeId: node.id, message: BLOCK_NOT_EXECUTABLE_MESSAGE });
+    }
+
     const definition: BlockDefinition | undefined = getBlock(node.type);
     if (!definition?.validate) continue;
 
+    // As regras do próprio bloco continuam valendo mesmo quando ele não é
+    // executável: quando o `execute` chegar, o usuário não deve descobrir um
+    // problema novo que estava escondido atrás do primeiro.
     const message = definition.validate(node.data, context);
     if (message) issues.push({ nodeId: node.id, message });
   }

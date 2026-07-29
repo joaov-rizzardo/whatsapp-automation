@@ -88,6 +88,14 @@ function createFakes(seed: AutomationRecord[] = [baseRecord()]) {
     async findDraft(automationId) {
       return drafts.get(automationId) ?? null;
     },
+    // Consultas do motor (spec 008): quem as exercita é flow-runtime, com o
+    // Postgres real. Aqui elas só precisam existir.
+    async findTriggerCandidates() {
+      throw new Error("não usado por AutomationsService");
+    },
+    async findVersionDocument() {
+      throw new Error("não usado por AutomationsService");
+    },
     async saveDraft() {
       throw new Error("não usado por AutomationsService");
     },

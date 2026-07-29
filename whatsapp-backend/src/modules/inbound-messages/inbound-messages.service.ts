@@ -3,6 +3,7 @@ import { NotFoundError } from "../../shared/errors.js";
 import { normalizeInboundMessage } from "./inbound-messages.normalizer.js";
 import type {
   IgnoreReason,
+  InboundMessage,
   InboundResult,
   NormalizedMessage,
 } from "./inbound-messages.types.js";
@@ -30,18 +31,31 @@ export interface ConnectionLookup {
 }
 
 /**
+ * Where a processed message goes next. Declared as a port so this module never
+ * learns that a flow engine exists — the composition root wires the two, and
+ * the consumer keeps calling exactly one service ("one consumer, one service").
+ *
+ * Optional on purpose: the module is still complete without it, and its tests
+ * do not need a fake engine to assert normalization and filtering.
+ */
+export interface InboundMessageSink {
+  handle(message: InboundMessage): Promise<void>;
+}
+
+/**
  * The business rules for a message arriving at a connected number. Framework
  * agnostic (it takes its dependencies in the constructor and never imports
  * fastify), because it is driven from the worker process by a queue consumer.
  *
- * Today it normalizes, filters and logs. The execution engine plugs in at the
- * end of `handleInboundMessage`, where an InboundMessage is already resolved.
+ * It normalizes, filters, and hands what is left to the sink — the flow engine
+ * (spec 008), which decides whether any automation answers it.
  */
 export class InboundMessageService {
   constructor(
     private readonly connections: ConnectionLookup,
     private readonly logger: Logger,
     private readonly now: () => Date = () => new Date(),
+    private readonly sink?: InboundMessageSink,
   ) {}
 
   /**
@@ -99,17 +113,14 @@ export class InboundMessageService {
 
     const message = { ...normalized, organizationId: connection.organizationId };
 
+    // No PII: the conversation is inspectable in `execution_message` since spec
+    // 008, which is exactly the condition spec 007 §4.7 set for dropping the
+    // temporary exception that used to log the number, name and text here.
     this.logger.info(
       {
         instanceName,
         kind: message.content.kind,
-        // PII — temporário (spec 007 §4.7). Sem número, nome e texto não há como
-        // verificar que a mensagem certa chegou, que é o objetivo desta etapa.
-        // Isto sai quando a persistência entrar e o conteúdo for inspecionável
-        // no banco; o log volta a ser { instanceName, kind, externalId }.
-        from: message.senderNumber,
-        name: message.senderName,
-        text: message.content.kind === "text" ? message.content.text : undefined,
+        externalId: message.externalId,
         rawType:
           message.content.kind === "unsupported"
             ? message.content.rawType
@@ -119,6 +130,11 @@ export class InboundMessageService {
         ? "inbound message received"
         : "inbound message received (tipo ainda não suportado)",
     );
+
+    // Last, and outside any try/catch: a failure here must reach the consumer,
+    // which nacks so the broker redelivers. Swallowing it would drop a real
+    // message silently, which is the one outcome worse than a dead letter.
+    await this.sink?.handle(message);
 
     return { status: "processed", message };
   }

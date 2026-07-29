@@ -23,6 +23,30 @@ export interface EvolutionClient {
   }): Promise<EvolutionConnectResult>;
   logout(instanceName: string): Promise<void>;
   deleteInstance(instanceName: string): Promise<void>;
+  /**
+   * Envia um texto. O primeiro método que **produz** algo no WhatsApp em vez de
+   * administrar a instância — é a ponta de saída do motor de fluxos (spec 008).
+   */
+  sendText(params: SendTextParams): Promise<SendTextResult>;
+}
+
+export interface SendTextParams {
+  instanceName: string;
+  /** Destino com DDI, sem o sufixo de JID. */
+  number: string;
+  text: string;
+  /** Milissegundos de "digitando…" antes de a mensagem sair. */
+  delayMs?: number;
+}
+
+export interface SendTextResult {
+  /**
+   * O `key.id` da mensagem enviada — **quando ele vier**. O corpo da resposta do
+   * `sendText` não é documentado (`docs/evolution/04-mensagens.md`), então ler
+   * um campo obrigatório aqui seria transformar uma suposição em exceção no
+   * meio de uma conversa. Sem ele, a mensagem é gravada sem correlação externa.
+   */
+  externalId: string | null;
 }
 
 export interface EvolutionClientOptions {
@@ -41,6 +65,22 @@ export class EvolutionApiError extends Error {
     super(`Evolution API ${path} responded ${status}`);
     this.name = "EvolutionApiError";
   }
+}
+
+/**
+ * Reads `key.id` out of an undocumented response body, defensively — the shape
+ * of what `sendText` answers is `[não verificado]` in the docs, and the only
+ * thing worse than not having the id is throwing a TypeError while the customer
+ * waits. Anything unexpected reads as "no id", which the caller supports.
+ */
+function readMessageId(response: unknown): string | null {
+  if (typeof response !== "object" || response === null) return null;
+
+  const key = (response as { key?: unknown }).key;
+  if (typeof key !== "object" || key === null) return null;
+
+  const id = (key as { id?: unknown }).id;
+  return typeof id === "string" && id !== "" ? id : null;
 }
 
 /**
@@ -134,6 +174,29 @@ export function createEvolutionClient(
         "DELETE",
         `/instance/delete/${encodeURIComponent(instanceName)}`,
       );
+    },
+
+    async sendText({ instanceName, number, text, delayMs }) {
+      // Nem o número nem o texto entram no log — a conversa é inspecionável na
+      // tabela execution_message, que é o que fechou a exceção de PII da 007.
+      logger.debug(
+        { instanceName, textLength: text.length, delayMs },
+        "sending whatsapp text",
+      );
+
+      const response = await request<unknown>(
+        "POST",
+        `/message/sendText/${encodeURIComponent(instanceName)}`,
+        {
+          number,
+          text,
+          // Só manda `delay` quando há o que esperar: um `delay: 0` é ruído no
+          // corpo e a doc não diz como a Evolution o interpreta.
+          ...(delayMs && delayMs > 0 ? { delay: delayMs } : {}),
+        },
+      );
+
+      return { externalId: readMessageId(response) };
     },
   };
 }

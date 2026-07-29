@@ -75,6 +75,11 @@ function createFakeEvolution(
   let createAttempts = 0;
   return {
     calls,
+    // This module never sends: the flow engine (spec 008) owns sending, and a
+    // connection test calling it would be testing the wrong module.
+    async sendText() {
+      throw new Error("whatsapp-connection does not send messages");
+    },
     async createInstance(params) {
       createAttempts += 1;
       if (createAttempts <= createInUseAttempts) {

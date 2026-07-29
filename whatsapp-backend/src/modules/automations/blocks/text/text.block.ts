@@ -20,6 +20,12 @@ export const textBlock = defineBlock<TextData>({
   type: "text",
   dataSchema: textDataSchema,
   handles: () => ({ inputs: ["in"], outputs: ["out"] }),
+  execute: async (data, ctx) => {
+    await ctx.send.text(ctx.variables.render(data.text), {
+      typingSeconds: data.typingSeconds,
+    });
+    return { kind: "next", handle: "out" };
+  },
   // O único bloco que referencia variáveis por nome, então o único cuja
   // validação precisa das variáveis do sistema tanto quanto das do documento.
   validate: (data, { variables }) => {

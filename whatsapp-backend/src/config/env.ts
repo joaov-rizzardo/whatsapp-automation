@@ -11,6 +11,15 @@ const envSchema = z.object({
 
   DATABASE_URL: z.string().min(1),
 
+  // Redis — the backing store for the BullMQ queue that runs the flow engine
+  // (spec 008). Use db 0: the Evolution API holds db 1 (CACHE_REDIS_URI in the
+  // compose file), and sharing one would let its cache flush collide with jobs
+  // in flight. Same reason RABBITMQ_URL is matched by prefix: redis:// is a
+  // valid URL that z.url() rejects for not being http.
+  REDIS_URL: z
+    .string()
+    .startsWith("redis://", "must be a redis:// connection string"),
+
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.url(),
   CLIENT_ORIGIN: z.url(),

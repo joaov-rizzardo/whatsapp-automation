@@ -42,11 +42,27 @@ export interface PublishedVersion {
   automation: AutomationRecord;
 }
 
+/** Uma versão publicada e ativa, do jeito que o motor precisa vê-la. */
+export interface TriggerCandidateRecord {
+  id: string;
+  automationId: string;
+  trigger: AutomationTrigger;
+  publishedAt: Date;
+}
+
 export interface FlowRepository {
   findDraft(automationId: string): Promise<FlowDraftRecord | null>;
   /** `null` = a versão não bate; ninguém sobrescreveu nada. */
   saveDraft(input: SaveDraftRecord): Promise<SavedDraft | null>;
   publish(input: PublishRecord): Promise<PublishedVersion>;
+
+  /**
+   * As versões que podem responder a uma mensagem: automação **ativa** e **com
+   * versão publicada**. Sem documento — é a lista inteira da organização, e só
+   * a escolhida precisa ser carregada (spec 008 §4.4).
+   */
+  findTriggerCandidates(organizationId: string): Promise<TriggerCandidateRecord[]>;
+  findVersionDocument(versionId: string): Promise<FlowDocument | null>;
 }
 
 export function createFlowRepository(prisma: PrismaClient): FlowRepository {
@@ -93,6 +109,60 @@ export function createFlowRepository(prisma: PrismaClient): FlowRepository {
           automation: toAutomationRecord(automation),
         };
       });
+    },
+
+    async findTriggerCandidates(organizationId) {
+      // Duas consultas porque o ponteiro automation -> flow_version é por
+      // NÚMERO, não por FK (spec 006), e o Prisma não compara duas colunas de
+      // tabelas diferentes num `where`. Traduzir isso para SQL cru custaria mais
+      // do que a segunda ida ao banco.
+      const automations = await prisma.automation.findMany({
+        where: {
+          organizationId,
+          isActive: true,
+          publishedVersionNumber: { not: null },
+        },
+        select: { id: true, publishedVersionNumber: true },
+      });
+
+      const published = automations.flatMap((automation) =>
+        automation.publishedVersionNumber === null
+          ? []
+          : [
+              {
+                automationId: automation.id,
+                number: automation.publishedVersionNumber,
+              },
+            ],
+      );
+      if (published.length === 0) return [];
+
+      const versions = await prisma.flowVersion.findMany({
+        where: { OR: published },
+        select: {
+          id: true,
+          automationId: true,
+          trigger: true,
+          publishedAt: true,
+        },
+      });
+
+      return versions.map((version) => ({
+        id: version.id,
+        automationId: version.automationId,
+        // O gatilho lido é o da VERSÃO, nunca `automation.trigger`: aquele é
+        // derivado do rascunho e pode já ter mudado desde a publicação.
+        trigger: version.trigger as AutomationTrigger,
+        publishedAt: version.publishedAt,
+      }));
+    },
+
+    async findVersionDocument(versionId) {
+      const version = await prisma.flowVersion.findUnique({
+        where: { id: versionId },
+        select: { document: true },
+      });
+      return version ? (version.document as FlowDocument) : null;
     },
 
     async publish({ automationId, document, trigger, draftVersion }) {

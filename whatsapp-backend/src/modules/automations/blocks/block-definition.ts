@@ -1,5 +1,6 @@
 import type { JSONSchema } from "json-schema-to-ts";
 
+import type { ResumeInput, RuntimeContext, StepOutcome } from "./block-runtime.js";
 import type { FlowVariableDocument } from "../flow.schema.js";
 import type { ValidationIssue } from "../../../shared/errors.js";
 import type { VariableType } from "./variable-types.js";
@@ -8,8 +9,8 @@ import type { VariableType } from "./variable-types.js";
  * O contrato do registry de blocos do backend — o espelho do registry do
  * frontend, do lado que importa para os dados. Não é código compartilhado (a
  * regra do repositório é explícita: cada lado declara o seu, o contrato entre
- * eles é HTTP): lá a responsabilidade é *desenhar*, aqui é *validar* e, quando
- * o motor existir, *executar*.
+ * eles é HTTP): lá a responsabilidade é *desenhar*, aqui é *validar* e — desde
+ * a spec 008 — *executar*, pelo `execute`/`resume` no fim deste arquivo.
  *
  * Um bloco novo é um arquivo aqui e um lá. Nada de coluna nova, nada de
  * ALTER TABLE.
@@ -68,7 +69,27 @@ export type BlockDefinition<Data = unknown> = {
    */
   createData?: () => Data;
 
-  // execute?: (…) => …   ← a spec do motor entra aqui, e em nenhum outro lugar
+  /**
+   * Executa o bloco (spec 008). Devolve uma **intenção** — continuar, dormir,
+   * esperar resposta, encerrar — e nunca toca em fila, banco ou HTTP: quem
+   * agenda, grava e envia é o motor, através das portas do `ctx`.
+   *
+   * **A ausência dele é o que impede a publicação** (spec 008 §4.10): "tem
+   * `execute`" e "é executável" são a mesma frase, então não há uma segunda
+   * lista de tipos executáveis para esquecer de atualizar.
+   */
+  execute?: (data: Data, ctx: RuntimeContext) => Promise<StepOutcome>;
+
+  /**
+   * Só para quem devolve `awaitReply`: o que fazer quando a espera acaba, por
+   * resposta ou por tempo. Um bloco que suspende sem `resume` ficaria preso —
+   * `registry.getExecutable` é onde isso é conferido.
+   */
+  resume?: (
+    data: Data,
+    ctx: RuntimeContext,
+    input: ResumeInput,
+  ) => Promise<StepOutcome>;
 };
 
 /**

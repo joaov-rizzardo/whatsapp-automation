@@ -67,6 +67,10 @@ export const startBlock = defineBlock<StartData>({
   // A automação nasce com este bloco, então é o único que precisa saber criar
   // os próprios dados deste lado.
   createData: () => ({ trigger: NO_TRIGGER }),
+  // A âncora não faz nada: quando o motor chega aqui, o gatilho já casou. Ela
+  // existe para que "tem execute" e "é executável" continuem sendo a mesma
+  // frase — sem isto, o nó de início seria a exceção da regra da publicação.
+  execute: async () => ({ kind: "next", handle: "out" }),
   validate: (data) => {
     if (data.trigger.kind === "none") return "Defina o gatilho do fluxo";
     if (data.trigger.kind === "keyword" && data.trigger.keywords.length === 0) {

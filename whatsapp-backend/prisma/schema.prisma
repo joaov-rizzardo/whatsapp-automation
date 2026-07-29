@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -164,8 +163,8 @@ model Automation {
   publishedVersionNumber Int?
   /// Versão do rascunho de onde a publicação saiu — é o que responde "há
   /// alterações não publicadas?" sem comparar documentos nem relógios.
-  publishedDraftVersion Int?
-  publishedAt           DateTime?
+  publishedDraftVersion  Int?
+  publishedAt            DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -188,7 +187,7 @@ model FlowDraft {
   /// Opaco para o banco, validado pelo registry de blocos na escrita.
   document Json
   /// Trava otimista: sobe 1 a cada salvamento aceito. Versão que não bate → 409.
-  version Int @default(1)
+  version  Int  @default(1)
 
   updatedAt DateTime @updatedAt
 
@@ -203,11 +202,11 @@ model FlowVersion {
   automationId String
   automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
-  number   Int
-  document Json
+  number       Int
+  document     Json
   /// Copiado do nó de início no ato da publicação: o motor casa a mensagem
   /// recebida contra ISTO, nunca contra o gatilho do rascunho.
-  trigger Json
+  trigger      Json
   /// De qual versão do rascunho esta publicação saiu.
   draftVersion Int
 
@@ -215,4 +214,102 @@ model FlowVersion {
 
   @@unique([automationId, number])
   @@map("flow_version")
+}
+
+/// Quem já escreveu para o número da organização. NENHUMA coluna de conteúdo —
+/// não é tabela de mensagem (spec 008 §3): é quem-é-quem, a verdade do gatilho
+/// "primeiro contato" e a trava do "um chatbot por vez".
+model WhatsappContact {
+  id             String  @id @default(cuid())
+  organizationId String
+  jid            String
+  number         String
+  /// O nome que a pessoa pôs no próprio aparelho. Alimenta {{nome}}.
+  pushName       String?
+
+  /// A trava do um-por-vez. Coluna solta, sem FK para flow_execution, pelo
+  /// mesmo motivo do automation -> flow_version da 006: fecharia um ciclo com
+  /// o cascade. Única para que dois consumers em paralelo não criem duas
+  /// execuções para o mesmo contato.
+  activeExecutionId String? @unique
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  executions FlowExecution[]
+
+  @@unique([organizationId, jid])
+  @@map("whatsapp_contact")
+}
+
+/// Uma conversa do chatbot com um contato, presa à versão em que começou:
+/// publicar outra versão no meio não muda o desenho que ela está seguindo.
+model FlowExecution {
+  id             String          @id @default(cuid())
+  organizationId String
+  contactId      String
+  contact        WhatsappContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  /// Ids soltos, sem FK: apagar uma automação não pode ser bloqueado pelo
+  /// histórico dela, e o histórico não deve sumir junto.
+  automationId  String
+  flowVersionId String
+
+  /// running | waiting | sleeping | completed | failed | expired
+  status        String
+  currentNodeId String?
+
+  /// A trava otimista contra o at-least-once do BullMQ: sobe a cada passo, e um
+  /// job com token velho é descartado em silêncio (spec 008 §4.6).
+  waitToken Int @default(0)
+  /// Orçamento total de blocos, contra fluxo cíclico. Sobrevive entre ticks —
+  /// é o que faz o reagendamento do teto por tick não zerar o orçamento.
+  stepCount Int @default(0)
+
+  /// { "<variableId>": "<valor>" } — inclui sys:ultima_resposta, a única de
+  /// sistema que é guardada (spec 008 §4.8).
+  variables Json @default("{}")
+
+  startedAt      DateTime  @default(now())
+  lastActivityAt DateTime  @updatedAt
+  /// Zumbi não segura contato para sempre: o job `expire` varre por aqui.
+  expiresAt      DateTime
+  finishedAt     DateTime?
+  /// Só em failed/expired, para o log: "step-limit", "send-failed",
+  /// "unimplemented-block:condition"…
+  error          String?
+
+  messages ExecutionMessage[]
+
+  @@index([organizationId, status])
+  @@index([contactId])
+  @@index([status, expiresAt])
+  @@map("flow_execution")
+}
+
+/// O que foi recebido e enviado NAQUELA execução, na ordem.
+model ExecutionMessage {
+  id          String        @id @default(cuid())
+  executionId String
+  execution   FlowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  /// in | out
+  direction  String
+  /// text | unsupported
+  kind       String
+  text       String?   @db.Text
+  /// key.id do Baileys na entrada; o id devolvido pela Evolution na saída,
+  /// quando ele existir (spec 008 §4.9).
+  externalId String?
+  /// Qual bloco produziu esta saída. Null na entrada.
+  nodeId     String?
+  /// Entrada: quando o motor a entregou a um `aguardar resposta`. Null = ainda
+  /// no buffer. É esta coluna que É o buffer — sem segunda fonte da verdade.
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([executionId, externalId])
+  @@index([executionId, createdAt])
+  @@map("execution_message")
 }

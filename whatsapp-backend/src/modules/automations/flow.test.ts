@@ -24,6 +24,7 @@ import {
 } from "./flow.repository.js";
 import type { FlowDocument, FlowEdgeDocument, FlowNodeDocument } from "./flow.schema.js";
 import {
+  BLOCK_NOT_EXECUTABLE_MESSAGE,
   countBlocks,
   createInitialDocument,
   deriveTrigger,
@@ -117,6 +118,14 @@ function createFakeRepositories(automation?: Partial<AutomationRecord>) {
   const flowRepository: FlowRepository = {
     async findDraft(automationId) {
       return drafts.get(automationId) ?? null;
+    },
+    // Consultas do motor (spec 008): exercitadas em flow-runtime, contra o
+    // Postgres real. A FlowService não as chama.
+    async findTriggerCandidates() {
+      throw new Error("não usado por FlowService");
+    },
+    async findVersionDocument() {
+      throw new Error("não usado por FlowService");
     },
     async saveDraft({ automationId, expectedVersion, document, trigger, blockCount }) {
       const draft = drafts.get(automationId);
@@ -623,7 +632,37 @@ describe("FlowService.publish", () => {
     expect(error).toBeInstanceOf(FlowInvalidError);
     expect((error as FlowInvalidError).issues).toEqual([
       { nodeId: "text-b2", message: "Sem mensagem" },
+      // O randomizador ainda não tem `execute` (spec 008 §4.10), e o problema
+      // do próprio bloco continua aparecendo junto: quando o `execute` chegar,
+      // o usuário não descobre um problema novo escondido atrás do primeiro.
+      { nodeId: "randomizer-c3", message: BLOCK_NOT_EXECUTABLE_MESSAGE },
       { nodeId: "randomizer-c3", message: "As saídas somam 80%" },
+    ]);
+  });
+
+  it("recusa publicar um bloco que o motor ainda não sabe rodar", async () => {
+    const context = await saveAndPublish(
+      document({
+        nodes: [
+          startNode({ kind: "anyMessage" }),
+          conditionNode([
+            {
+              variableId: "sys:hora",
+              operator: "between",
+              right: { kind: "range", from: "08:00", to: "18:00" },
+            },
+          ]),
+        ],
+      }),
+    );
+
+    const error = await context.service
+      .publish(AUTOMATION_ID, ORG)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(FlowInvalidError);
+    expect((error as FlowInvalidError).issues).toEqual([
+      { nodeId: "condition-d4", message: BLOCK_NOT_EXECUTABLE_MESSAGE },
     ]);
   });
 
@@ -730,70 +769,77 @@ describe("FlowService.publish, condições sobre variáveis do sistema", () => {
     return service.publish(AUTOMATION_ID, ORG).catch((caught: unknown) => caught);
   }
 
+  /**
+   * Só os problemas que a validação da CONDIÇÃO produz.
+   *
+   * Desde a spec 008 um fluxo com `comparação` também não publica por o bloco
+   * ainda não ter `execute` — problema de outra regra, testada em "recusa
+   * publicar um bloco que o motor ainda não sabe rodar". Filtrar aqui é o que
+   * mantém estes testes falando sobre o que eles falam: operadores, faixas,
+   * conjuntos e formatos dos tipos especiais. Quando `comparação` ganhar o seu
+   * `execute`, o filtro simplesmente para de tirar alguma coisa.
+   */
   async function issuesOf(comparisons: ComparisonInput[]) {
     const result = await publishWith(comparisons);
     expect(result).toBeInstanceOf(FlowInvalidError);
-    return (result as FlowInvalidError).issues;
+    return (result as FlowInvalidError).issues.filter(
+      (issue) => issue.message !== BLOCK_NOT_EXECUTABLE_MESSAGE,
+    );
+  }
+
+  /** O equivalente de "publicaria" enquanto o bloco não é executável. */
+  async function expectNoConditionIssue(comparisons: ComparisonInput[]) {
+    expect(await issuesOf(comparisons)).toEqual([]);
   }
 
   it("aceita uma faixa de horas", async () => {
-    await expect(
-      publishWith([
+    await expectNoConditionIssue([
         {
           variableId: "sys:hora",
           operator: "between",
           right: { kind: "range", from: "08:00", to: "18:00" },
         },
-      ]),
-    ).resolves.toMatchObject({ versionNumber: 1 });
+      ]);
   });
 
   it("aceita a faixa que atravessa a meia-noite", async () => {
-    await expect(
-      publishWith([
+    await expectNoConditionIssue([
         {
           variableId: "sys:hora",
           operator: "between",
           right: { kind: "range", from: "22:00", to: "06:00" },
         },
-      ]),
-    ).resolves.toMatchObject({ versionNumber: 1 });
+      ]);
   });
 
   it("aceita um conjunto de dias da semana", async () => {
-    await expect(
-      publishWith([
+    await expectNoConditionIssue([
         {
           variableId: "sys:dia_semana",
           operator: "in",
           right: { kind: "set", values: ["1", "2", "3", "4", "5"] },
         },
-      ]),
-    ).resolves.toMatchObject({ versionNumber: 1 });
+      ]);
   });
 
   it("aceita um operador sem lado direito", async () => {
-    await expect(
-      publishWith([
+    await expectNoConditionIssue([
         {
           variableId: "sys:dia_semana",
           operator: "is_weekend",
           right: { kind: "literal", value: "" },
         },
-      ]),
-    ).resolves.toMatchObject({ versionNumber: 1 });
+      ]);
   });
 
   it("aceita uma faixa de datas", async () => {
-    await expect(
-      publishWith([
+    await expectNoConditionIssue([
         {
           variableId: "sys:data",
           operator: "between",
           right: { kind: "range", from: "2026-12-01", to: "2026-12-31" },
         },
-      ]),
-    ).resolves.toMatchObject({ versionNumber: 1 });
+      ]);
   });
 
   it("recusa um operador que não vale para o tipo", async () => {
@@ -920,6 +966,7 @@ describe("FlowService.publish, condições sobre variáveis do sistema", () => {
       .catch((caught: unknown) => caught);
 
     expect((error as FlowInvalidError).issues).toEqual([
+      { nodeId: "set-e5", message: BLOCK_NOT_EXECUTABLE_MESSAGE },
       { nodeId: "set-e5", message: "Informe o valor" },
     ]);
   });
@@ -945,9 +992,14 @@ describe("FlowService.publish, condições sobre variáveis do sistema", () => {
       }),
     });
 
-    await expect(service.publish(AUTOMATION_ID, ORG)).resolves.toMatchObject({
-      versionNumber: 1,
-    });
+    const error = await service
+      .publish(AUTOMATION_ID, ORG)
+      .catch((caught: unknown) => caught);
+
+    // Nenhum problema da condição — só o do bloco que ainda não roda.
+    expect((error as FlowInvalidError).issues).toEqual([
+      { nodeId: "condition-d4", message: BLOCK_NOT_EXECUTABLE_MESSAGE },
+    ]);
   });
 });
 
