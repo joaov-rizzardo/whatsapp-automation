@@ -188,6 +188,18 @@ function textNode(id = "text-b2", text = "Olá!"): FlowNodeDocument {
   };
 }
 
+function waitReplyNode(
+  data: Record<string, unknown> = {},
+  id = "wait-reply-e5",
+): FlowNodeDocument {
+  return {
+    id,
+    type: "waitReply",
+    position: { x: 320, y: 400 },
+    data: { variableId: null, timeout: { value: 5, unit: "minutes" }, ...data },
+  };
+}
+
 type ComparisonInput = {
   variableId: string;
   operator: string;
@@ -343,6 +355,22 @@ describe("FlowService.saveDraft recusa lixo estrutural", () => {
     await expect(save(doc)).rejects.toBeInstanceOf(ValidationError);
   });
 
+  it("agrupamento de mensagens acima do teto", async () => {
+    const doc = document({
+      nodes: [startNode(), waitReplyNode({ groupingSeconds: 120 })],
+    });
+
+    await expect(save(doc)).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("agrupamento de mensagens negativo", async () => {
+    const doc = document({
+      nodes: [startNode(), waitReplyNode({ groupingSeconds: -1 })],
+    });
+
+    await expect(save(doc)).rejects.toBeInstanceOf(ValidationError);
+  });
+
   it("schemaVersion maior do que o backend conhece", async () => {
     await expect(save(document({ schemaVersion: 2 }))).rejects.toBeInstanceOf(
       ValidationError,
@@ -418,6 +446,28 @@ describe("FlowService.saveDraft aceita um rascunho incompleto", () => {
   it("um bloco solto, sem nenhuma conexão", async () => {
     const { service } = createService();
     const doc = document({ nodes: [startNode(), textNode()] });
+
+    await expect(
+      service.saveDraft(AUTOMATION_ID, ORG, { version: 1, document: doc }),
+    ).resolves.toMatchObject({ version: 2 });
+  });
+
+  it("um aguardar resposta com o agrupamento de mensagens configurado", async () => {
+    const { service } = createService();
+    const doc = document({
+      nodes: [startNode(), waitReplyNode({ groupingSeconds: 5 })],
+    });
+
+    await expect(
+      service.saveDraft(AUTOMATION_ID, ORG, { version: 1, document: doc }),
+    ).resolves.toMatchObject({ version: 2 });
+  });
+
+  // O campo nasceu depois dos primeiros fluxos: um rascunho gravado sem ele
+  // precisa continuar salvando, senão o editor quebra ao abrir um fluxo antigo.
+  it("um aguardar resposta gravado antes do agrupamento existir", async () => {
+    const { service } = createService();
+    const doc = document({ nodes: [startNode(), waitReplyNode()] });
 
     await expect(
       service.saveDraft(AUTOMATION_ID, ORG, { version: 1, document: doc }),

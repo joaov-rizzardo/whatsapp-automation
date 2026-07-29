@@ -3,6 +3,7 @@ import { MessageCircleQuestionMark } from "lucide-react";
 import { defineBlock } from "@/features/flows/blocks/types";
 import { WaitReplyNode } from "@/features/flows/blocks/waitReply/WaitReplyNode";
 import {
+  DEFAULT_REPLY_GROUPING_SECONDS,
   WaitReplyModal,
   type WaitReplyData,
 } from "@/features/flows/blocks/waitReply/WaitReplyModal";
@@ -27,6 +28,7 @@ export const waitReplyDefinition = defineBlock<WaitReplyData>({
   createData: () => ({
     variableId: null,
     timeout: { value: 5, unit: "minutes" },
+    groupingSeconds: DEFAULT_REPLY_GROUPING_SECONDS,
   }),
   node: WaitReplyNode,
   modal: WaitReplyModal,

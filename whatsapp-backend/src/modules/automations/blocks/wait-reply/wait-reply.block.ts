@@ -3,6 +3,13 @@ import type { FromSchema } from "json-schema-to-ts";
 import { defineBlock } from "../block-definition.js";
 import { durationSchema } from "../value-schemas.js";
 
+/**
+ * Segundos de silêncio antes de dar a resposta por terminada. No WhatsApp,
+ * quem responde "oi", "quero saber", "o preço" mandou uma resposta só — o
+ * motor espera este tempo depois da última mensagem e junta tudo.
+ */
+export const DEFAULT_REPLY_GROUPING_SECONDS = 5;
+
 const waitReplyDataSchema = {
   type: "object",
   additionalProperties: false,
@@ -11,6 +18,12 @@ const waitReplyDataSchema = {
     /** null = a resposta é esperada, mas não é guardada em lugar nenhum. */
     variableId: { type: ["string", "null"], maxLength: 120 },
     timeout: durationSchema,
+    /**
+     * Opcional de propósito: o campo nasceu depois dos primeiros fluxos, e um
+     * rascunho gravado sem ele precisa continuar salvando. Ausente vale
+     * `DEFAULT_REPLY_GROUPING_SECONDS`; 0 desliga o agrupamento.
+     */
+    groupingSeconds: { type: "number", minimum: 0, maximum: 60 },
   },
 } as const;
 
