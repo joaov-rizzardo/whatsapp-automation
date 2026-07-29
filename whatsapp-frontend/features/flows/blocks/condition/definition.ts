@@ -14,7 +14,7 @@ import { isSpecialType, type FlowVariable } from "@/features/flows/types/variabl
 
 export const conditionDefinition = defineBlock<ConditionData>({
   type: "condition",
-  label: "Se",
+  label: "Comparação",
   description: "Compara variáveis e ramifica",
   icon: Split,
   category: "logic",

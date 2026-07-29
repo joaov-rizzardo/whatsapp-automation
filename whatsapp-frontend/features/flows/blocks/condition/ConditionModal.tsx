@@ -126,7 +126,7 @@ export function ConditionModal({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Configurar condição</DialogTitle>
+        <DialogTitle>Configurar comparação</DialogTitle>
         <DialogDescription>
           O fluxo segue por &ldquo;Verdadeiro&rdquo; quando as condições forem
           satisfeitas, e por &ldquo;Falso&rdquo; caso contrário.
