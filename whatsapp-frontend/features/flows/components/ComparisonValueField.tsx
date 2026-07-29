@@ -1,9 +1,5 @@
 "use client";
 
-import { Variable } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -12,15 +8,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ValueSourceToggle } from "@/features/flows/components/ValueSourceToggle";
 import { VariableSelect } from "@/features/flows/components/VariableSelect";
 import type { ComparisonValue } from "@/features/flows/types/comparisonValue";
 import type { CustomVariableType } from "@/features/flows/types/variable";
 
 /**
  * The right-hand side of a comparison or an assignment: a typed value, or
- * another variable. The toggle is a button rather than a second field so the
- * row stays one line — these appear stacked several at a time in the condition
- * modal.
+ * another variable. The source is a two-segment toggle (`ValueSourceToggle`)
+ * rather than a second field so the row stays one line — these appear stacked
+ * several at a time in the condition modal.
  *
  * The literal input follows the variable's type: a number field for números, a
  * true/false select for booleanos. Letting someone type "talvez" into a boolean
@@ -42,7 +39,7 @@ export function ComparisonValueField({
   const literal = value.kind === "literal" ? value.value : "";
 
   return (
-    <div className="flex flex-1 items-center gap-1">
+    <div className="flex flex-1 items-center gap-2">
       <div className="flex-1">
         {usingVariable ? (
           <VariableSelect
@@ -76,23 +73,16 @@ export function ComparisonValueField({
         )}
       </div>
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={usingVariable ? "Usar valor fixo" : "Usar outra variável"}
-        title={usingVariable ? "Usar valor fixo" : "Usar outra variável"}
-        className={cn(usingVariable && "text-primary")}
-        onClick={() =>
+      <ValueSourceToggle
+        value={usingVariable ? "variable" : "literal"}
+        onChange={(source) =>
           onChange(
-            usingVariable
-              ? { kind: "literal", value: "" }
-              : { kind: "variable", variableId: "" },
+            source === "variable"
+              ? { kind: "variable", variableId: "" }
+              : { kind: "literal", value: "" },
           )
         }
-      >
-        <Variable className="size-4" />
-      </Button>
+      />
     </div>
   );
 }
