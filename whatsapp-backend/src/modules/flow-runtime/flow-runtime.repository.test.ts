@@ -539,10 +539,21 @@ describe("progress and finishing", () => {
   });
 });
 
+/**
+ * O único teste do arquivo que a regra "uma organização por teste" **não**
+ * protege: a varredura de expiradas é global de propósito (é manutenção, não
+ * uma consulta de feature), então ela enxerga o que todos os outros testes
+ * deixaram para trás — e o resultado vem limitado.
+ *
+ * Daí as duas defesas abaixo, e elas andam juntas: a linha nasce no **epoch**,
+ * para que a ordem por prazo a ponha em primeiro lugar por mais lixo que exista;
+ * e o teste **encerra o que semeou**, para não ser mais um a empilhar. Sem a
+ * primeira, o teste quebra sozinho no dia em que o resto passar do limite — que
+ * foi exatamente o que aconteceu.
+ */
 describe("findExpired", () => {
   it("finds only unfinished executions past their deadline", async () => {
     const organizationId = orgId();
-    const past = new Date(Date.now() - 60_000);
 
     const expiredContact = await seedContact(organizationId);
     const expired = await repository.startExecution({
@@ -552,15 +563,23 @@ describe("findExpired", () => {
       flowVersionId: "ver-1",
       currentNodeId: "start-1",
       variables: {},
-      expiresAt: past,
+      expiresAt: new Date(0),
     });
     const freshContact = await seedContact(organizationId);
-    await seedExecution(organizationId, freshContact.id);
+    const fresh = await seedExecution(organizationId, freshContact.id);
 
     const found = await repository.findExpired(new Date(), 50);
     const ids = found.map((execution) => execution.id);
 
+    // Antes das asserções: assim a limpeza acontece mesmo quando uma falha.
+    if (expired) {
+      await repository.finish({ executionId: expired.id, status: "completed" });
+    }
+    await repository.finish({ executionId: fresh.id, status: "completed" });
+
     expect(ids).toContain(expired?.id);
+    // A outra metade do nome do teste: a que ainda tem prazo fica de fora.
+    expect(ids).not.toContain(fresh.id);
     expect(
       found.every((execution) => execution.expiresAt.getTime() <= Date.now()),
     ).toBe(true);
