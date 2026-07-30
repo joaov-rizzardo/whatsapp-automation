@@ -145,6 +145,81 @@ describe("createVariableStore", () => {
     });
   });
 
+  /**
+   * O que a spec 009 acrescentou. Até ela, `sys:` só era resolvido pelo
+   * `render`, por NOME — `get("sys:hora")` devolvia string vazia, e nenhum
+   * bloco de então exercitava isso. Os três blocos da 009 leem por id o tempo
+   * todo, e uma condição sobre uma hora vazia responderia sempre a mesma coisa.
+   */
+  describe("system variables read by id", () => {
+    it("resolves the clock by id, in the same timezone render uses", () => {
+      const subject = store({ now: new Date("2026-07-29T02:30:00Z") });
+
+      expect(subject.get("sys:hora")).toBe("23:30");
+      expect(subject.get("sys:data")).toBe("2026-07-28");
+      expect(subject.get("sys:mes")).toBe("7");
+      expect(subject.get("sys:dia_semana")).toBe("2");
+    });
+
+    it("resolves the contact by id", () => {
+      const subject = store({});
+
+      expect(subject.get("sys:nome")).toBe("João Silva");
+      expect(subject.get("sys:primeiro_nome")).toBe("João");
+      expect(subject.get("sys:numero_telefone")).toBe("5511988887777");
+    });
+
+    it("keeps reading sys:ultima_resposta from what was stored", () => {
+      const subject = store({ values: { [LAST_REPLY_VARIABLE_ID]: "oi" } });
+
+      expect(subject.get(LAST_REPLY_VARIABLE_ID)).toBe("oi");
+    });
+
+    it("reads an unknown sys: id as empty rather than throwing", () => {
+      expect(store({}).get("sys:inventada")).toBe("");
+    });
+
+    it("ignores a write to a computed system variable", () => {
+      // A publicação já barra; isto é defesa em profundidade para um documento
+      // congelado por um validador mais velho. Ignorar é melhor que lançar: uma
+      // execução não deve morrer por causa disso.
+      const subject = store({ now: new Date("2026-07-29T02:30:00Z") });
+
+      subject.set("sys:hora", "07:00");
+
+      expect(subject.get("sys:hora")).toBe("23:30");
+      expect(subject.toJSON()).toEqual({});
+    });
+  });
+
+  describe("typeOf", () => {
+    it("gives the declared type of a document variable", () => {
+      const subject = store({
+        variables: [
+          nomeCliente,
+          { id: "var-2", name: "total", type: "number", initialValue: "0" },
+        ],
+      });
+
+      expect(subject.typeOf("var-1")).toBe("text");
+      expect(subject.typeOf("var-2")).toBe("number");
+    });
+
+    it("gives the special type of a system variable, which the document cannot hold", () => {
+      const subject = store({});
+
+      expect(subject.typeOf("sys:hora")).toBe("time");
+      expect(subject.typeOf("sys:data")).toBe("date");
+      expect(subject.typeOf("sys:mes")).toBe("month");
+      expect(subject.typeOf("sys:dia_semana")).toBe("weekday");
+      expect(subject.typeOf("sys:nome")).toBe("text");
+    });
+
+    it("falls back to text for an unknown id, so a deleted variable is comparable", () => {
+      expect(store({}).typeOf("var-ghost")).toBe("text");
+    });
+  });
+
   describe("render", () => {
     it("replaces every occurrence, including repeats", () => {
       const subject = store({

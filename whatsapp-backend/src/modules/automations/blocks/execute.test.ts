@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { silentLogger } from "../../../lib/logger/logger.js";
 import type { RuntimeContext, SendTextOptions } from "./block-runtime.js";
+import { conditionBlock } from "./condition/condition.block.js";
+import { randomizerBlock } from "./randomizer/randomizer.block.js";
+import { setVariableBlock } from "./set-variable/set-variable.block.js";
+import type { VariableType } from "./variable-types.js";
 import { DEFAULT_REPLY_GROUPING_SECONDS } from "./wait-reply/wait-reply.block.js";
 import { delayBlock } from "./delay/delay.block.js";
 import { startBlock } from "./start/start.block.js";
@@ -13,17 +17,25 @@ import { waitReplyBlock } from "./wait-reply/wait-reply.block.js";
  * nenhuma infra. É esta a prova de que o bloco não conhece fila, Prisma nem
  * Evolution — se conhecesse, este arquivo precisaria de um contêiner.
  */
-function fakeContext(variables: Record<string, string> = {}) {
+function fakeContext(
+  variables: Record<string, string> = {},
+  options: { types?: Record<string, VariableType>; random?: number } = {},
+) {
   const sent: Array<{ text: string; options: SendTextOptions }> = [];
   const store = new Map(Object.entries(variables));
+  const reads: string[] = [];
 
   const ctx: RuntimeContext = {
     variables: {
-      get: (id) => store.get(id) ?? "",
+      get: (id) => {
+        reads.push(id);
+        return store.get(id) ?? "";
+      },
       set: (id, value) => store.set(id, value),
       // Um render burro de propósito: quem testa a interpolação de verdade é
       // variables.test.ts. Aqui só precisa provar que o bloco RENDERIZA.
       render: (text) => text.replace("{{nome}}", store.get("sys:nome") ?? ""),
+      typeOf: (id) => options.types?.[id] ?? "text",
     },
     send: {
       text: async (text, options = {}) => {
@@ -33,9 +45,10 @@ function fakeContext(variables: Record<string, string> = {}) {
     contact: { number: "5511999999999", name: "João" },
     logger: silentLogger,
     now: () => new Date("2026-07-29T12:00:00Z"),
+    random: () => options.random ?? 0,
   };
 
-  return { ctx, sent, store };
+  return { ctx, sent, store, reads };
 }
 
 function execute(
@@ -208,5 +221,344 @@ describe("waitReply.resume", () => {
 
     expect(store.get("var-nome")).toBe("valor anterior");
     expect(outcome).toEqual({ kind: "next", handle: "timeout" });
+  });
+});
+
+// --- Os três blocos da spec 009 ----------------------------------------------
+
+describe("condition.execute", () => {
+  const comparison = (
+    variableId: string,
+    operator: string,
+    right: unknown,
+    id = "cmp-1",
+  ) => ({ id, variableId, operator, right });
+
+  it("sai por `true` quando a comparação bate", async () => {
+    const { ctx } = fakeContext(
+      { "var-1": "10" },
+      { types: { "var-1": "number" } },
+    );
+
+    await expect(
+      execute(
+        conditionBlock,
+        {
+          logic: "and",
+          comparisons: [
+            comparison("var-1", "gt", { kind: "literal", value: "5" }),
+          ],
+        },
+        ctx,
+      ),
+    ).resolves.toEqual({ kind: "next", handle: "true" });
+  });
+
+  it("`E` é falso quando uma das duas falha", async () => {
+    const { ctx } = fakeContext(
+      { "var-1": "10", "var-2": "nao" },
+      { types: { "var-1": "number" } },
+    );
+
+    await expect(
+      execute(
+        conditionBlock,
+        {
+          logic: "and",
+          comparisons: [
+            comparison("var-1", "gt", { kind: "literal", value: "5" }),
+            comparison("var-2", "eq", { kind: "literal", value: "sim" }, "cmp-2"),
+          ],
+        },
+        ctx,
+      ),
+    ).resolves.toEqual({ kind: "next", handle: "false" });
+  });
+
+  it("`OU` é verdadeiro quando só a segunda passa", async () => {
+    const { ctx } = fakeContext({ "var-1": "nao", "var-2": "sim" });
+
+    await expect(
+      execute(
+        conditionBlock,
+        {
+          logic: "or",
+          comparisons: [
+            comparison("var-1", "eq", { kind: "literal", value: "sim" }),
+            comparison("var-2", "eq", { kind: "literal", value: "sim" }, "cmp-2"),
+          ],
+        },
+        ctx,
+      ),
+    ).resolves.toEqual({ kind: "next", handle: "true" });
+  });
+
+  it("faz curto-circuito: o `E` nem lê a segunda variável", async () => {
+    const { ctx, reads } = fakeContext({ "var-1": "nao", "var-2": "sim" });
+
+    await execute(
+      conditionBlock,
+      {
+        logic: "and",
+        comparisons: [
+          comparison("var-1", "eq", { kind: "literal", value: "sim" }),
+          comparison("var-2", "eq", { kind: "literal", value: "sim" }, "cmp-2"),
+        ],
+      },
+      ctx,
+    );
+
+    expect(reads).toEqual(["var-1"]);
+  });
+
+  /**
+   * O teste que pega o `get` que não resolvia variável de sistema por id: antes
+   * da spec 009 ele devolvia string vazia, e esta condição respondia `false`
+   * para qualquer hora do dia.
+   */
+  it("compara uma variável de sistema, lida por id e com o tipo dela", async () => {
+    const { ctx } = fakeContext(
+      { "sys:hora": "14:30" },
+      { types: { "sys:hora": "time" } },
+    );
+
+    await expect(
+      execute(
+        conditionBlock,
+        {
+          logic: "and",
+          comparisons: [
+            comparison("sys:hora", "between", {
+              kind: "range",
+              from: "08:00",
+              to: "18:00",
+            }),
+          ],
+        },
+        ctx,
+      ),
+    ).resolves.toEqual({ kind: "next", handle: "true" });
+  });
+
+  it("uma comparação sem variável é falsa, e não derruba a execução", async () => {
+    const { ctx } = fakeContext();
+
+    await expect(
+      execute(
+        conditionBlock,
+        {
+          logic: "and",
+          comparisons: [
+            { id: "cmp-1", variableId: null, operator: "eq", right: { kind: "literal", value: "x" } },
+          ],
+        },
+        ctx,
+      ),
+    ).resolves.toEqual({ kind: "next", handle: "false" });
+  });
+});
+
+describe("setVariable.execute", () => {
+  it("grava o valor e continua", async () => {
+    const { ctx, store } = fakeContext();
+
+    const outcome = await execute(
+      setVariableBlock,
+      {
+        variableId: "var-1",
+        operation: "set",
+        value: { kind: "literal", value: "sim" },
+      },
+      ctx,
+    );
+
+    expect(store.get("var-1")).toBe("sim");
+    expect(outcome).toEqual({ kind: "next", handle: "out" });
+  });
+
+  it("interpola o literal, porque `{{}}` não pode funcionar só numa caixa", async () => {
+    const { ctx, store } = fakeContext({ "sys:nome": "Maria" });
+
+    await execute(
+      setVariableBlock,
+      {
+        variableId: "var-1",
+        operation: "set",
+        value: { kind: "literal", value: "Olá, {{nome}}" },
+      },
+      ctx,
+    );
+
+    expect(store.get("var-1")).toBe("Olá, Maria");
+  });
+
+  it("copia de outra variável", async () => {
+    const { ctx, store } = fakeContext({ "var-origem": "João" });
+
+    await execute(
+      setVariableBlock,
+      {
+        variableId: "var-1",
+        operation: "set",
+        value: { kind: "variable", variableId: "var-origem" },
+      },
+      ctx,
+    );
+
+    expect(store.get("var-1")).toBe("João");
+  });
+
+  it("incrementa a partir do zero quando a variável está vazia", async () => {
+    const { ctx, store } = fakeContext();
+
+    await execute(
+      setVariableBlock,
+      {
+        variableId: "var-1",
+        operation: "increment",
+        value: { kind: "literal", value: "1" },
+      },
+      ctx,
+    );
+
+    expect(store.get("var-1")).toBe("1");
+  });
+
+  it("decrementa abaixo de zero", async () => {
+    const { ctx, store } = fakeContext({ "var-1": "1" });
+
+    await execute(
+      setVariableBlock,
+      {
+        variableId: "var-1",
+        operation: "decrement",
+        value: { kind: "literal", value: "3" },
+      },
+      ctx,
+    );
+
+    expect(store.get("var-1")).toBe("-2");
+  });
+
+  it("não deixa o ponto flutuante vazar para a mensagem do cliente", async () => {
+    const { ctx, store } = fakeContext({ "var-1": "0,1" });
+
+    await execute(
+      setVariableBlock,
+      {
+        variableId: "var-1",
+        operation: "increment",
+        value: { kind: "literal", value: "0,2" },
+      },
+      ctx,
+    );
+
+    expect(store.get("var-1")).toBe("0.3");
+  });
+
+  it("soma zero quando a parcela é ilegível, em vez de gravar NaN", async () => {
+    const { ctx, store } = fakeContext({ "var-1": "5" });
+
+    await execute(
+      setVariableBlock,
+      {
+        variableId: "var-1",
+        operation: "increment",
+        value: { kind: "literal", value: "muito" },
+      },
+      ctx,
+    );
+
+    expect(store.get("var-1")).toBe("5");
+  });
+
+  it("sem variável escolhida, continua sem gravar nada", async () => {
+    const { ctx, store } = fakeContext();
+
+    const outcome = await execute(
+      setVariableBlock,
+      {
+        variableId: null,
+        operation: "set",
+        value: { kind: "literal", value: "sim" },
+      },
+      ctx,
+    );
+
+    expect(store.size).toBe(0);
+    expect(outcome).toEqual({ kind: "next", handle: "out" });
+  });
+});
+
+describe("randomizer.execute", () => {
+  const branches = [
+    { id: "branch-a", label: "A", percentage: 30 },
+    { id: "branch-b", label: "B", percentage: 70 },
+  ];
+
+  it("escolhe a primeira saída no começo da faixa", async () => {
+    const { ctx } = fakeContext({}, { random: 0 });
+
+    await expect(execute(randomizerBlock, { branches }, ctx)).resolves.toEqual({
+      kind: "next",
+      handle: "branch-a",
+    });
+  });
+
+  it("escolhe a última saída no fim da faixa", async () => {
+    const { ctx } = fakeContext({}, { random: 0.99 });
+
+    await expect(execute(randomizerBlock, { branches }, ctx)).resolves.toEqual({
+      kind: "next",
+      handle: "branch-b",
+    });
+  });
+
+  it("respeita a borda entre as duas faixas", async () => {
+    // 29,9% ainda é da primeira; 30% já é da segunda.
+    const antes = fakeContext({}, { random: 0.299 });
+    const depois = fakeContext({}, { random: 0.3 });
+
+    await expect(
+      execute(randomizerBlock, { branches }, antes.ctx),
+    ).resolves.toMatchObject({ handle: "branch-a" });
+    await expect(
+      execute(randomizerBlock, { branches }, depois.ctx),
+    ).resolves.toMatchObject({ handle: "branch-b" });
+  });
+
+  it("uma saída de 0% nunca é escolhida, nem no sorteio zero", async () => {
+    const { ctx } = fakeContext({}, { random: 0 });
+
+    await expect(
+      execute(
+        randomizerBlock,
+        {
+          branches: [
+            { id: "branch-zero", label: "Zero", percentage: 0 },
+            { id: "branch-a", label: "A", percentage: 100 },
+          ],
+        },
+        ctx,
+      ),
+    ).resolves.toEqual({ kind: "next", handle: "branch-a" });
+  });
+
+  it("a sobra de ponto flutuante cai na última saída com percentual", async () => {
+    const { ctx } = fakeContext({}, { random: 0.9999999 });
+
+    await expect(
+      execute(
+        randomizerBlock,
+        {
+          branches: [
+            { id: "branch-a", label: "A", percentage: 33.3 },
+            { id: "branch-b", label: "B", percentage: 33.3 },
+            { id: "branch-c", label: "C", percentage: 33.3 },
+          ],
+        },
+        ctx,
+      ),
+    ).resolves.toEqual({ kind: "next", handle: "branch-c" });
   });
 });

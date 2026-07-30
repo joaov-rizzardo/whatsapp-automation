@@ -4,26 +4,14 @@
  * "coisa" acorda o chatbot.
  *
  * A regra (spec 008 §3): **contém, palavra inteira**, sobre texto normalizado.
+ *
+ * A normalização em si mora nos BLOCOS (`blocks/comparison/normalize.ts`),
+ * porque o operador `contém` do bloco de comparação precisa enxergar o texto
+ * exatamente como o gatilho enxerga (spec 009 §3). A direção do import é a de
+ * sempre: o motor conhece os blocos, os blocos não conhecem o motor.
  */
 
-/**
- * Os dois lados passam por aqui — a mensagem e a palavra-chave — porque só
- * normalizando os dois é que "ORÇAMENTO!!" casa com "orcamento".
- *
- * Ordem importa: o NFD separa a letra do diacrítico para que o diacrítico possa
- * ser removido sem levar a letra junto (`ç` -> `c` + cedilha -> `c`).
- */
-export function normalizeText(text: string): string {
-  return text
-    .normalize("NFD")
-    // Escapado de propósito: a faixa dos diacríticos combinantes é invisível
-    // quando escrita literalmente, e uma linha que ninguém enxerga é uma linha
-    // que alguém apaga sem querer.
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
+import { normalizeText } from "../automations/blocks/comparison/normalize.js";
 
 function tokenize(text: string): string[] {
   const normalized = normalizeText(text);

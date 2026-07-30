@@ -24,7 +24,6 @@ import {
 } from "./flow.repository.js";
 import type { FlowDocument, FlowEdgeDocument, FlowNodeDocument } from "./flow.schema.js";
 import {
-  BLOCK_NOT_EXECUTABLE_MESSAGE,
   countBlocks,
   createInitialDocument,
   deriveTrigger,
@@ -632,37 +631,7 @@ describe("FlowService.publish", () => {
     expect(error).toBeInstanceOf(FlowInvalidError);
     expect((error as FlowInvalidError).issues).toEqual([
       { nodeId: "text-b2", message: "Sem mensagem" },
-      // O randomizador ainda não tem `execute` (spec 008 §4.10), e o problema
-      // do próprio bloco continua aparecendo junto: quando o `execute` chegar,
-      // o usuário não descobre um problema novo escondido atrás do primeiro.
-      { nodeId: "randomizer-c3", message: BLOCK_NOT_EXECUTABLE_MESSAGE },
       { nodeId: "randomizer-c3", message: "As saídas somam 80%" },
-    ]);
-  });
-
-  it("recusa publicar um bloco que o motor ainda não sabe rodar", async () => {
-    const context = await saveAndPublish(
-      document({
-        nodes: [
-          startNode({ kind: "anyMessage" }),
-          conditionNode([
-            {
-              variableId: "sys:hora",
-              operator: "between",
-              right: { kind: "range", from: "08:00", to: "18:00" },
-            },
-          ]),
-        ],
-      }),
-    );
-
-    const error = await context.service
-      .publish(AUTOMATION_ID, ORG)
-      .catch((caught: unknown) => caught);
-
-    expect(error).toBeInstanceOf(FlowInvalidError);
-    expect((error as FlowInvalidError).issues).toEqual([
-      { nodeId: "condition-d4", message: BLOCK_NOT_EXECUTABLE_MESSAGE },
     ]);
   });
 
@@ -704,6 +673,55 @@ describe("FlowService.publish", () => {
     const context = await saveAndPublish(
       document({
         nodes: [startNode({ kind: "anyMessage" }), textNode("text-b2", "solto")],
+      }),
+    );
+
+    await expect(context.service.publish(AUTOMATION_ID, ORG)).resolves.toMatchObject({
+      versionNumber: 1,
+    });
+  });
+
+  /**
+   * O teste que mede a spec 009 inteira: os sete tipos do editor num documento
+   * só, publicando. É a barreira do §4.10 da 008 deixando de acusar — sem que
+   * uma linha de código de publicação tenha mudado.
+   */
+  it("publica um fluxo com os sete tipos de bloco", async () => {
+    const context = await saveAndPublish(
+      document({
+        nodes: [
+          startNode({ kind: "keyword", keywords: ["teste"] }),
+          textNode("text-b2", "Oi {{nome}}!"),
+          waitReplyNode({ variableId: "var-1" }),
+          conditionNode([
+            {
+              variableId: "sys:hora",
+              operator: "between",
+              right: { kind: "range", from: "08:00", to: "18:00" },
+            },
+          ]),
+          {
+            id: "set-f6",
+            type: "setVariable",
+            position: { x: 640, y: 200 },
+            data: {
+              variableId: "var-2",
+              operation: "increment",
+              value: { kind: "literal", value: "1" },
+            },
+          },
+          {
+            id: "delay-g7",
+            type: "delay",
+            position: { x: 640, y: 400 },
+            data: { duration: { value: 10, unit: "seconds" } },
+          },
+          randomizerNode(),
+        ],
+        variables: [
+          { id: "var-1", name: "resposta", type: "text", initialValue: "" },
+          { id: "var-2", name: "tentativas", type: "number", initialValue: "0" },
+        ],
       }),
     );
 
@@ -769,27 +787,21 @@ describe("FlowService.publish, condições sobre variáveis do sistema", () => {
     return service.publish(AUTOMATION_ID, ORG).catch((caught: unknown) => caught);
   }
 
-  /**
-   * Só os problemas que a validação da CONDIÇÃO produz.
-   *
-   * Desde a spec 008 um fluxo com `comparação` também não publica por o bloco
-   * ainda não ter `execute` — problema de outra regra, testada em "recusa
-   * publicar um bloco que o motor ainda não sabe rodar". Filtrar aqui é o que
-   * mantém estes testes falando sobre o que eles falam: operadores, faixas,
-   * conjuntos e formatos dos tipos especiais. Quando `comparação` ganhar o seu
-   * `execute`, o filtro simplesmente para de tirar alguma coisa.
-   */
+  /** Só os problemas que a validação da CONDIÇÃO produz. */
   async function issuesOf(comparisons: ComparisonInput[]) {
     const result = await publishWith(comparisons);
     expect(result).toBeInstanceOf(FlowInvalidError);
-    return (result as FlowInvalidError).issues.filter(
-      (issue) => issue.message !== BLOCK_NOT_EXECUTABLE_MESSAGE,
-    );
+    return (result as FlowInvalidError).issues;
   }
 
-  /** O equivalente de "publicaria" enquanto o bloco não é executável. */
+  /**
+   * Nenhum problema na condição é, desde a spec 009, literalmente publicar: o
+   * bloco ganhou o seu `execute`, e com ele a última coisa que ainda o barrava.
+   */
   async function expectNoConditionIssue(comparisons: ComparisonInput[]) {
-    expect(await issuesOf(comparisons)).toEqual([]);
+    await expect(publishWith(comparisons)).resolves.toMatchObject({
+      versionNumber: 1,
+    });
   }
 
   it("aceita uma faixa de horas", async () => {
@@ -966,7 +978,6 @@ describe("FlowService.publish, condições sobre variáveis do sistema", () => {
       .catch((caught: unknown) => caught);
 
     expect((error as FlowInvalidError).issues).toEqual([
-      { nodeId: "set-e5", message: BLOCK_NOT_EXECUTABLE_MESSAGE },
       { nodeId: "set-e5", message: "Informe o valor" },
     ]);
   });
@@ -992,14 +1003,77 @@ describe("FlowService.publish, condições sobre variáveis do sistema", () => {
       }),
     });
 
+    await expect(service.publish(AUTOMATION_ID, ORG)).resolves.toMatchObject({
+      versionNumber: 1,
+    });
+  });
+
+  /**
+   * A única regra de validação que a spec 009 acrescentou. Incrementar um texto
+   * é um bug de desenho, e o pior lugar possível para descobri-lo é no meio de
+   * uma conversa.
+   */
+  it("recusa somar numa variável que não é numérica", async () => {
+    const { service } = createService();
+    await service.saveDraft(AUTOMATION_ID, ORG, {
+      version: 1,
+      document: document({
+        nodes: [
+          startNode({ kind: "anyMessage" }),
+          {
+            id: "set-e5",
+            type: "setVariable",
+            position: { x: 0, y: 400 },
+            data: {
+              variableId: "var-1",
+              operation: "increment",
+              value: { kind: "literal", value: "1" },
+            },
+          },
+        ],
+        variables: [{ id: "var-1", name: "nome", type: "text", initialValue: "" }],
+      }),
+    });
+
     const error = await service
       .publish(AUTOMATION_ID, ORG)
       .catch((caught: unknown) => caught);
 
-    // Nenhum problema da condição — só o do bloco que ainda não roda.
     expect((error as FlowInvalidError).issues).toEqual([
-      { nodeId: "condition-d4", message: BLOCK_NOT_EXECUTABLE_MESSAGE },
+      {
+        nodeId: "set-e5",
+        message: "Só é possível somar ou subtrair de uma variável numérica",
+      },
     ]);
+  });
+
+  it("aceita somar numa variável numérica", async () => {
+    const { service } = createService();
+    await service.saveDraft(AUTOMATION_ID, ORG, {
+      version: 1,
+      document: document({
+        nodes: [
+          startNode({ kind: "anyMessage" }),
+          {
+            id: "set-e5",
+            type: "setVariable",
+            position: { x: 0, y: 400 },
+            data: {
+              variableId: "var-1",
+              operation: "increment",
+              value: { kind: "literal", value: "1" },
+            },
+          },
+        ],
+        variables: [
+          { id: "var-1", name: "tentativas", type: "number", initialValue: "0" },
+        ],
+      }),
+    });
+
+    await expect(service.publish(AUTOMATION_ID, ORG)).resolves.toMatchObject({
+      versionNumber: 1,
+    });
   });
 });
 

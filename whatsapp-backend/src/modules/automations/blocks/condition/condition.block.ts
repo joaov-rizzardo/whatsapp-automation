@@ -1,6 +1,7 @@
 import type { FromSchema } from "json-schema-to-ts";
 
 import { defineBlock, type FlowValidationVariable } from "../block-definition.js";
+import { evaluateComparison } from "../comparison/evaluate.js";
 import { getOperator, type OperatorValueKind } from "../operators.js";
 import { comparisonValueSchema, type ComparisonValue } from "../value-schemas.js";
 import {
@@ -61,6 +62,40 @@ export const conditionBlock = defineBlock<ConditionData>({
     }
 
     return null;
+  },
+
+  /**
+   * Ramificar é escolher uma saída, e é só isso: nenhum efeito, nenhuma espera.
+   *
+   * `every`/`some` sobre uma função (e não sobre um array já materializado) é o
+   * curto-circuito de verdade — num `E` que já falhou, a segunda variável nem
+   * chega a ser lida.
+   *
+   * `false` sem aresta encerra a execução, e isso é o `walk` que resolve: um
+   * fluxo que só continua quando a condição bate é o desenho mais comum de
+   * todos, não um erro.
+   */
+  execute: async (data, ctx) => {
+    const matches = (comparison: ConditionData["comparisons"][number]): boolean => {
+      if (!comparison.variableId) return false;
+
+      return evaluateComparison({
+        // A esquerda é quem define a pergunta: `"9" < "10"` é falso como texto
+        // e verdadeiro como número, e é o tipo dela que decide qual das duas é.
+        type: ctx.variables.typeOf(comparison.variableId),
+        operator: comparison.operator,
+        left: ctx.variables.get(comparison.variableId),
+        right: comparison.right,
+        resolve: (variableId) => ctx.variables.get(variableId),
+      });
+    };
+
+    const matched =
+      data.logic === "and"
+        ? data.comparisons.every(matches)
+        : data.comparisons.some(matches);
+
+    return { kind: "next", handle: matched ? "true" : "false" };
   },
 });
 

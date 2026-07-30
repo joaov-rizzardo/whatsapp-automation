@@ -67,6 +67,8 @@ export interface FlowRuntimeServiceOptions {
   dedupe: MessageDeduplicator;
   logger: Logger;
   now?: () => Date;
+  /** Injetado pelo mesmo motivo que o relógio: o randomizador precisa ser testável. */
+  random?: () => number;
 }
 
 export interface StepJob {
@@ -83,6 +85,7 @@ export class FlowRuntimeService {
   private readonly dedupe: MessageDeduplicator;
   private readonly logger: Logger;
   private readonly now: () => Date;
+  private readonly random: () => number;
 
   constructor(options: FlowRuntimeServiceOptions) {
     this.repository = options.repository;
@@ -92,6 +95,7 @@ export class FlowRuntimeService {
     this.dedupe = options.dedupe;
     this.logger = options.logger;
     this.now = options.now ?? (() => new Date());
+    this.random = options.random ?? Math.random;
   }
 
   // --- Entrada: uma mensagem chegou ------------------------------------------
@@ -203,11 +207,19 @@ export class FlowRuntimeService {
       throw new Error("bloco tentou produzir efeito fora de um passo");
     };
     return {
-      variables: { get: () => "", set: fail, render: (text) => text },
+      variables: {
+        get: () => "",
+        set: fail,
+        render: (text) => text,
+        typeOf: () => "text",
+      },
       send: { text: fail },
       contact: { number: "", name: null },
       logger: this.logger,
       now: this.now,
+      // Um sorteio a partir daqui não decidiria nada: só `awaitReply` passa por
+      // este contexto, e ele é puro.
+      random: () => 0,
     };
   }
 
@@ -405,6 +417,7 @@ export class FlowRuntimeService {
       contact: { number: claimed.contact.number, name: claimed.contact.pushName },
       logger: this.logger,
       now: this.now,
+      random: this.random,
     };
 
     // `definition` anda junto com `node`: as duas variáveis mudam na mesma

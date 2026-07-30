@@ -1,5 +1,7 @@
 import type { VariableStore } from "../automations/blocks/block-runtime.js";
 import { renderPlaceholders } from "../automations/blocks/interpolation.js";
+import { systemVariables } from "../automations/blocks/system-variables.js";
+import type { VariableType } from "../automations/blocks/variable-types.js";
 import type { FlowVariableDocument } from "../automations/flow.schema.js";
 
 /**
@@ -19,11 +21,14 @@ import type { FlowVariableDocument } from "../automations/flow.schema.js";
 const TIME_ZONE = "America/Sao_Paulo";
 
 /**
- * A única variável de sistema com estado. O prefixo `sys:` é o mesmo de
- * `blocks/system-variables.ts`, e é o que garante que ela nunca colida com um
- * cuid de variável do documento.
+ * O prefixo de toda variável de sistema, o mesmo de `blocks/system-variables.ts`
+ * — e o que garante que nenhuma delas colida com um cuid do documento. É por ele
+ * que `get` sabe, olhando só o id, que deve calcular em vez de procurar.
  */
-export const LAST_REPLY_VARIABLE_ID = "sys:ultima_resposta";
+const SYSTEM_PREFIX = "sys:";
+
+/** A única variável de sistema com estado. */
+export const LAST_REPLY_VARIABLE_ID = `${SYSTEM_PREFIX}ultima_resposta`;
 
 export interface VariableStoreInput {
   /** As declaradas no documento da versão publicada. */
@@ -80,7 +85,27 @@ export function createVariableStore(input: VariableStoreInput): FlowVariableStor
     input.variables.map((variable) => [variable.name, variable.id]),
   );
 
+  const typeById = new Map<string, VariableType>([
+    ...systemVariables.map(
+      (variable) => [variable.id, variable.type] as const,
+    ),
+    ...input.variables.map((variable) => [variable.id, variable.type] as const),
+  ]);
+
+  /** É calculada na leitura? Todas as de sistema menos `ultima_resposta`. */
+  function isComputed(variableId: string): boolean {
+    return (
+      variableId.startsWith(SYSTEM_PREFIX) && variableId !== LAST_REPLY_VARIABLE_ID
+    );
+  }
+
   function get(variableId: string): string {
+    // As de sistema pelo id, e não só pelo nome no `render`: os blocos da spec
+    // 009 leem `sys:hora` por id o tempo todo, e uma condição sobre uma hora
+    // vazia responderia sempre a mesma coisa.
+    if (isComputed(variableId)) {
+      return systemValue(variableId.slice(SYSTEM_PREFIX.length)) ?? "";
+    }
     // `??`, não `||`: uma variável gravada como string vazia foi zerada de
     // propósito, e voltar ao `initialValue` desfaria o que o fluxo fez.
     return values.get(variableId) ?? initialValueById.get(variableId) ?? "";
@@ -134,7 +159,17 @@ export function createVariableStore(input: VariableStoreInput): FlowVariableStor
     get,
 
     set(variableId, value) {
+      // Gravar numa calculada não é erro do usuário — a publicação já barra —,
+      // é documento congelado por um validador mais velho. Ignorar em silêncio
+      // é melhor que derrubar a conversa; guardar seria congelar um relógio.
+      if (isComputed(variableId)) return;
       values.set(variableId, value);
+    },
+
+    typeOf(variableId) {
+      // Desconhecida lê como texto, do mesmo jeito que `get` lê como vazio: uma
+      // variável apagada faz a comparação ser falsa, não explodir.
+      return typeById.get(variableId) ?? "text";
     },
 
     render(text) {

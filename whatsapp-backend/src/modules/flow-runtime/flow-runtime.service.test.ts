@@ -518,14 +518,21 @@ describe("runStep", () => {
       expect(repository.contacts.get(execution.contactId)?.activeExecutionId).toBeNull();
     });
 
-    it("fails with the block type when a node cannot be executed yet", async () => {
+    /**
+     * Desde a spec 009 todo bloco do editor executa, então o assunto deste
+     * teste é o **próximo**: um tipo que esta versão do backend não conhece,
+     * numa versão publicada por um editor mais novo. Do ponto de vista do motor
+     * "não existe" e "existe e não roda" são a mesma coisa — não há o que
+     * executar —, e é por isso que um tipo inventado serve de dublê.
+     */
+    it("fails with the block type when a node cannot be executed", async () => {
       const execution = await trigger(
         document({
           nodes: [
             node("start-1", "start", { trigger: { kind: "anyMessage" } }),
-            node("cond-1", "condition", { conditions: [] }),
+            node("pigeon-1", "carrierPigeon", {}),
           ],
-          edges: [edge("start-1", "out", "cond-1")],
+          edges: [edge("start-1", "out", "pigeon-1")],
         }),
         { trigger: { kind: "anyMessage" } },
       );
@@ -534,9 +541,85 @@ describe("runStep", () => {
 
       expect(repository.finished.at(-1)).toMatchObject({
         status: "failed",
-        error: "unimplemented-block:condition",
+        error: "unimplemented-block:carrierPigeon",
       });
       expect(repository.contacts.get(execution.contactId)?.activeExecutionId).toBeNull();
+    });
+  });
+
+  /**
+   * A integração dos três blocos da spec 009 com a caminhada. O que estes dois
+   * testes provam não está em nenhum teste de bloco: que gravar, comparar e
+   * ramificar acontecem na MESMA store, na ordem do desenho — e que o motor não
+   * precisou de um ramo novo para nada disso.
+   */
+  describe("branching (spec 009)", () => {
+    /** início -> definir variável(+1) -> comparação(tentativas = 1) -> texto | texto */
+    function counterFlow(): FlowDocument {
+      return document({
+        variables: [
+          { id: "var-1", name: "tentativas", type: "number", initialValue: "0" },
+        ],
+        nodes: [
+          node("start-1", "start", { trigger: { kind: "anyMessage" } }),
+          node("set-1", "setVariable", {
+            variableId: "var-1",
+            operation: "increment",
+            value: { kind: "literal", value: "1" },
+          }),
+          node("cond-1", "condition", {
+            logic: "and",
+            comparisons: [
+              {
+                id: "cmp-1",
+                variableId: "var-1",
+                operator: "eq",
+                right: { kind: "literal", value: "1" },
+              },
+            ],
+          }),
+          node("text-sim", "text", { text: "primeira vez", typingSeconds: 0 }),
+          node("text-nao", "text", { text: "de novo", typingSeconds: 0 }),
+        ],
+        edges: [
+          edge("start-1", "out", "set-1"),
+          edge("set-1", "out", "cond-1"),
+          edge("cond-1", "true", "text-sim"),
+          edge("cond-1", "false", "text-nao"),
+        ],
+      });
+    }
+
+    it("grava, compara e sai pelo ramo certo", async () => {
+      const execution = await trigger(counterFlow(), {
+        trigger: { kind: "anyMessage" },
+      });
+
+      await service.runStep({ name: "advance", executionId: execution.id, token: 0 });
+
+      expect(outboundTexts(execution.id)).toEqual(["primeira vez"]);
+      const stored = repository.executions.get(execution.id);
+      expect(stored?.status).toBe("completed");
+      expect(stored?.variables).toMatchObject({ "var-1": "1" });
+    });
+
+    it("um `false` sem aresta encerra o fluxo, e não é erro", async () => {
+      // O desenho mais comum de todos: só continua quando a condição bate.
+      const flow = counterFlow();
+      const document_ = {
+        ...flow,
+        edges: flow.edges.filter((item) => item.sourceHandle !== "true"),
+      };
+
+      const execution = await trigger(document_, {
+        trigger: { kind: "anyMessage" },
+      });
+
+      await service.runStep({ name: "advance", executionId: execution.id, token: 0 });
+
+      expect(outboundTexts(execution.id)).toEqual([]);
+      expect(repository.executions.get(execution.id)?.status).toBe("completed");
+      expect(repository.finished.at(-1)?.error).toBeFalsy();
     });
   });
 

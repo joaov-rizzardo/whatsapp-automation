@@ -223,8 +223,12 @@ function assertStructurallyValid(document: FlowDocument): void {
  * O que o editor mostra no nó de um bloco que o motor ainda não sabe rodar.
  *
  * A alternativa era publicar um fluxo que morre no meio da conversa, sem tela
- * nenhuma para contar o que houve (spec 008 §4.10). A restrição some sozinha
- * conforme cada bloco ganha o seu `execute` — nada aqui muda de novo.
+ * nenhuma para contar o que houve (spec 008 §4.10).
+ *
+ * **Hoje nenhum bloco do editor cai aqui**: a spec 009 fechou os três que
+ * faltavam, e a barreira parou de acusar sem que uma linha deste arquivo
+ * mudasse — que era exatamente a aposta. A regra fica de pé para o próximo
+ * bloco que nascer sem `execute` (mídia, botões).
  */
 export const BLOCK_NOT_EXECUTABLE_MESSAGE = "Este bloco ainda não pode ser executado";
 

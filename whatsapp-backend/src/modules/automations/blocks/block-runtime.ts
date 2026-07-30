@@ -1,4 +1,5 @@
 import type { Logger } from "../../../lib/logger/logger.js";
+import type { VariableType } from "./variable-types.js";
 
 /**
  * O contrato de EXECUÇÃO de um bloco (spec 008 §4.3) — o outro lado do
@@ -44,6 +45,15 @@ export interface VariableStore {
   set(variableId: string, value: string): void;
   /** Troca cada `{{nome}}` pelo valor. A outra metade de `interpolation.ts`. */
   render(text: string): string;
+  /**
+   * O tipo declarado da variável — do documento ou do sistema. Desconhecida
+   * lê como `"text"`, do mesmo jeito que `get` lê como vazio.
+   *
+   * Existe porque o `data` de uma comparação carrega o **id** e o operador, e
+   * mais nada: `"9" < "10"` é falso como texto e verdadeiro como número, e só a
+   * store sabe qual dos dois a pergunta é.
+   */
+  typeOf(variableId: string): VariableType;
 }
 
 export interface SendTextOptions {
@@ -66,4 +76,9 @@ export interface RuntimeContext {
   readonly logger: Logger;
   /** Injetado para que um teste de bloco possa congelar o relógio. */
   now(): Date;
+  /**
+   * `[0, 1)`. Injetado pelo mesmo motivo que o relógio: sem isto, o teste do
+   * randomizador vira estatística — e um teste estatístico é um teste que pisca.
+   */
+  random(): number;
 }

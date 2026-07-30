@@ -36,8 +36,12 @@ export const setVariableDefinition = defineBlock<SetVariableData>({
 
   validate: (data, variables) => {
     if (!data.variableId) return "Escolha uma variável";
-    if (!variables.some((variable) => variable.id === data.variableId)) {
-      return "A variável foi removida";
+    const target = variables.find((variable) => variable.id === data.variableId);
+    if (!target) return "A variável foi removida";
+    // Somar num texto é um bug de desenho, e o meio de uma conversa é o pior
+    // lugar possível para descobri-lo. Espelha a regra do backend.
+    if (data.operation !== "set" && target.type !== "number") {
+      return "Só é possível somar ou subtrair de uma variável numérica";
     }
     if (data.value.kind === "variable" && !data.value.variableId) {
       return "Escolha a variável de origem";
